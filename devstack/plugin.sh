@@ -5,6 +5,8 @@ NET_ANSIBLE_DIR=$DEST/networking-ansible
 NET_ANSIBLE_MECH_DRIVER_ALIAS=ansible
 NET_ANSIBLE_ROLES_DIR=$NET_ANSIBLE_DIR/etc/ansible/roles/
 
+SITE_PACKAGES=$(python -c "from site import getsitepackages; print(getsitepackages()[0]);")
+
 ANSIBLE_ROLES_DIR=/etc/ansible/roles
 
 NET_ANS_SWITCH_INI_FILE="/etc/neutron/plugins/ml2/ml2_conf_netansible.ini"
@@ -104,6 +106,7 @@ function install_ansible_roles {
     #TODO: Do this via setuptools
     sudo mkdir -p $ANSIBLE_ROLES_DIR
     sudo cp -r $NET_ANSIBLE_ROLES_DIR/* $ANSIBLE_ROLES_DIR/.
+    sudo cp -r $SITE_PACKAGES/$ANSIBLE_ROLES_DIR/* $ANSIBLE_ROLES_DIR/.
 }
 
 

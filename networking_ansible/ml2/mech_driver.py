@@ -13,17 +13,19 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
 from neutron.db import provisioning_blocks
-from neutron.plugins.ml2.common import exceptions as ml2_exc
 from neutron_lib.api.definitions import portbindings
 from neutron_lib.api.definitions import trunk_details
 from neutron_lib.callbacks import resources
 from neutron_lib.plugins.ml2 import api as ml2api
 from oslo_log import log as logging
 
-from networking_ansible import api
 from networking_ansible import config
-from networking_ansible.ml2 import exceptions
+from networking_ansible import exceptions
+
+from network_runner import api as net_runr_api
+from network_runner.resources.inventory import Inventory
 
 LOG = logging.getLogger(__name__)
 
@@ -39,14 +41,14 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
     def initialize(self):
         LOG.debug("Initializing Ansible ML2 driver")
 
-        inventory = config.build_ansible_inventory()
-        # create a dict of switches that have macs defined
-        # dict uses mac for key and name for value
-        hosts = inventory['all']['hosts']
-        self.mac_map = {
-            h['mac'].upper(): name for name, h in hosts.items() if 'mac' in h
-        }
-        self.ansnet = api.NetworkingAnsible(inventory)
+        # Get ML2 config
+        self.ml2config = config.Config()
+
+        # Build a network runner inventory object
+        # and instatiate network runner
+        _inv = Inventory()
+        _inv.deserialize({'all': {'hosts': self.ml2config.inventory}})
+        self.net_runr = net_runr_api.NetworkRunner(_inv)
 
     def create_network_postcommit(self, context):
         """Create a network.
@@ -69,12 +71,12 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         if provider_type == 'vlan' and segmentation_id:
             # assuming all hosts
             # TODO(radez): can we filter by physnets?
-            for host_name in self.ansnet.inventory['all']['hosts']:
-                host = self.ansnet.inventory['all']['hosts'][host_name]
+            for host_name in self.ml2config.inventory:
+                host = self.ml2config.inventory[host_name]
                 if host.get('manage_vlans', True):
                     # Create VLAN on the switch
                     try:
-                        self.ansnet.create_vlan(host_name, segmentation_id)
+                        self.net_runr.create_vlan(host_name, segmentation_id)
                         LOG.info('Network {net_id} has been added on ansible '
                                  'host {host}'.format(
                                      net_id=network['id'],
@@ -89,7 +91,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                                       net_id=network_id,
                                       host=host_name,
                                       err=e))
-                        raise ml2_exc.MechanismDriverError(e)
+                        raise exceptions.NetworkingAnsibleMechException(e)
 
     def delete_network_postcommit(self, context):
         """Delete a network.
@@ -112,12 +114,12 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         if provider_type == 'vlan' and segmentation_id:
             # assuming all hosts
             # TODO(radez): can we filter by physnets?
-            for host_name in self.ansnet.inventory['all']['hosts']:
-                host = self.ansnet.inventory['all']['hosts'][host_name]
+            for host_name in self.ml2config.inventory:
+                host = self.ml2config.inventory[host_name]
                 if host.get('manage_vlans', True):
                     # Delete VLAN on the switch
                     try:
-                        self.ansnet.delete_vlan(host_name, segmentation_id)
+                        self.net_runr.delete_vlan(host_name, segmentation_id)
                         LOG.info('Network {net_id} has been deleted on '
                                  'ansible host {host}'.format(
                                      net_id=network['id'],
@@ -129,7 +131,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                                   'reason: {err}'.format(net_id=network['id'],
                                                          host=host_name,
                                                          err=e))
-                        raise ml2_exc.MechanismDriverError(e)
+                        raise exceptions.NetworkingAnsibleMechException(e)
 
     def update_port_postcommit(self, context):
         """Update a port.
@@ -166,7 +168,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
             # information to be lost, so remove the port from the network on
             # the switch now while we have the required information.
             try:
-                self.ansnet.delete_port(switch_name, switch_port)
+                self.net_runr.delete_port(switch_name, switch_port)
                 LOG.info('Port {neutron_port} has been unplugged from '
                          'network {net_id} on device {switch_name}'.format(
                              neutron_port=port['id'],
@@ -180,7 +182,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                               net_id=network['id'],
                               switch_name=switch_name,
                               exc=e))
-                raise ml2_exc.MechanismDriverError(e)
+                raise exceptions.NetworkingAnsibleMechException(e)
 
     def delete_port_postcommit(self, context):
         """Delete a port.
@@ -205,7 +207,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                           switch_name=switch_name,
                           segmentation_id=segmentation_id))
             try:
-                self.ansnet.delete_port(switch_name, switch_port)
+                self.net_runr.delete_port(switch_name, switch_port)
                 LOG.info('Port {neutron_port} has been unplugged from '
                          'network {net_id} on device {switch_name}'.format(
                              neutron_port=port['id'],
@@ -219,7 +221,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                               net_id=network['id'],
                               switch_name=switch_name,
                               exc=e))
-                raise ml2_exc.MechanismDriverError(e)
+                raise exceptions.NetworkingAnsibleMechException(e)
 
     def bind_port(self, context):
         """Attempt to bind a port.
@@ -290,10 +292,10 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
             if trunk_details.TRUNK_DETAILS in port:
                 sub_ports = port[trunk_details.TRUNK_DETAILS]['sub_ports']
                 trunked_vlans = [sp['segmentation_id'] for sp in sub_ports]
-                self.ansnet.conf_trunk_port(switch_name, switch_port,
-                                            segmentation_id, trunked_vlans)
+                self.net_runr.conf_trunk_port(switch_name, switch_port,
+                                              segmentation_id, trunked_vlans)
             else:
-                self.ansnet.update_access_port(switch_name,
+                self.net_runr.conf_access_port(switch_name,
                                                switch_port,
                                                segmentation_id)
             context.set_binding(segments[0][ml2api.ID],
@@ -311,7 +313,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                           net_id=network['id'],
                           switch_name=switch_name,
                           exc=e))
-            raise ml2_exc.MechanismDriverError(e)
+            raise exceptions.NetworkingAnsibleMechException(e)
 
     def _link_info_from_port(self, port, network=None):
         network = network or {}
@@ -328,8 +330,8 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         # fill in the switch name if mac exists but name is not defined
         # this provides support for introspection when the switch's mac is
         # also provided in the ML2 conf for ansible-networking
-        if not switch_name and switch_mac in self.mac_map:
-            switch_name = self.mac_map[switch_mac]
+        if not switch_name and switch_mac in self.ml2config.mac_map:
+            switch_name = self.ml2config.mac_map[switch_mac]
         segmentation_id = network.get('provider:segmentation_id', '')
         return switch_name, switch_port, segmentation_id
 
