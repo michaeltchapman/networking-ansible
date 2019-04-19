@@ -8,9 +8,9 @@
       - openstack/ironic
       - openstack/ironic-python-agent
       - openstack/ironic-tempest-plugin
-      - openstack/pyghmi
+      - x/pyghmi
       - openstack/virtualbmc
-      - openstack/networking-ansible
+      - x/networking-ansible
     irrelevant-files:
       - ^doc/.*$
       - ^networking_ansible/tests/.*$
@@ -65,12 +65,12 @@
         Q_PLUGIN: ml2
         SWIFT_ENABLE_TEMPURLS: True
         SWIFT_TEMPURL_KEY: secretkey
-        TEMPEST_PLUGINS: "'{{ ansible_user_dir }}/src/git.openstack.org/openstack/ironic-tempest-plugin'"
+        TEMPEST_PLUGINS: "'{{ ansible_user_dir }}/src/opendev.org/openstack/ironic-tempest-plugin'"
         TENANT_VLAN_RANGE: 100:150
         VIRT_DRIVER: ironic
       devstack_plugins:
-        ironic: https://git.openstack.org/openstack/ironic
-        networking-ansible: https://git.openstack.org/openstack/networking-ansible
+        ironic: https://opendev.org/openstack/ironic
+        networking-ansible: https://opendev.org/x/networking-ansible
       zuul_copy_output:
         '{{ devstack_base_dir }}/ironic-bm-logs': 'logs'
       devstack_services:
