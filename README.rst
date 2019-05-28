@@ -15,7 +15,7 @@ Ansible role.
 
 * Free software: Apache license
 * Documentation: https://networking-ansible.readthedocs.io/en/latest/
-* Source: https://git.openstack.org/cgit/openstack/networking-ansible/
+* Source: https://opendev.org/openstack/networking-ansible/
 * Bugs: https://storyboard.openstack.org/#!/project/openstack/networking-ansible/
 
 Components
