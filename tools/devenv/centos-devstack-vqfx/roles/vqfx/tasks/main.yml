@@ -1,0 +1,8 @@
+---
+- name: configure ansible_network_os for vqfx
+  set_fact:
+    ansible_network_os: junos
+
+- include_tasks: configure_ssh.yml
+
+- include_tasks: configure_ports.yml

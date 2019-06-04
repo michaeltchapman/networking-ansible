@@ -1,0 +1,9 @@
+---
+- name: provision controller
+  hosts: controller
+  roles:
+    - common
+    - development
+    #- conntest
+    - devstack-all-in-one
+    - netansible

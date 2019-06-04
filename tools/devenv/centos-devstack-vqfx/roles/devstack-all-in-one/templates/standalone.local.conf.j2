@@ -1,0 +1,103 @@
+[[local|localrc]]
+enable_plugin ironic https://opendev.org/openstack/ironic
+disable_all_services
+enable_service g-reg
+enable_service rabbit
+disable_service n-api
+disable_service c-api
+enable_service g-api
+enable_service mysql
+enable_service tempest
+enable_service etcd3
+enable_service s-proxy
+enable_service q-dhcp
+disable_service n-api-meta
+disable_service nova
+enable_service tls-proxy
+enable_service q-l3
+disable_service c-sch
+disable_service n-novnc
+enable_service s-object
+enable_service peakmem_tracker
+disable_service n-cauth
+enable_service q-metering
+enable_service key
+disable_service n-cond
+enable_service s-container
+enable_service q-meta
+enable_service q-svc
+disable_service placement-api
+disable_service n-cpu
+enable_service s-account
+disable_service c-vol
+disable_service n-obj
+disable_service c-bak
+enable_service q-agt
+disable_service horizon
+disable_service cinder
+disable_service n-sch
+enable_service dstat
+ADMIN_PASSWORD=secretadmin
+#BUILD_TIMEOUT=720
+CINDER_PERIODIC_INTERVAL=10
+DATABASE_PASSWORD=secretdatabase
+DEBUG_LIBVIRT_COREDUMPS=True
+DEFAULT_INSTANCE_TYPE=baremetal
+FIXED_RANGE=10.1.0.0/20
+FLOATING_RANGE=172.24.5.0/24
+FORCE_CONFIG_DRIVE=False
+#HOST_IP=10.209.1.30
+HOST_IP={{ controller_host_ip }}
+INSTALL_TEMPEST=False
+IPV4_ADDRS_SAFE_TO_USE=10.1.0.0/20
+IRONIC_AUTOMATED_CLEAN_ENABLED=True
+IRONIC_BAREMETAL_BASIC_OPS=True
+IRONIC_BUILD_DEPLOY_RAMDISK=False
+IRONIC_CALLBACK_TIMEOUT=600
+IRONIC_DEFAULT_DEPLOY_INTERFACE=direct
+IRONIC_DEFAULT_RESCUE_INTERFACE=agent
+IRONIC_DEPLOY_DRIVER=ipmi
+IRONIC_ENABLED_DEPLOY_INTERFACES=iscsi,direct
+IRONIC_INSPECTOR_BUILD_RAMDISK=False
+IRONIC_RAMDISK_TYPE=tinyipa
+IRONIC_RPC_TRANSPORT=json-rpc
+IRONIC_TEMPEST_BUILD_TIMEOUT=720
+IRONIC_TEMPEST_WHOLE_DISK_IMAGE=False
+IRONIC_VM_COUNT=6
+IRONIC_VM_EPHEMERAL_DISK=1
+IRONIC_VM_LOG_DIR=/opt/stack/ironic-bm-logs
+IRONIC_VM_SPECS_RAM=384
+LIBVIRT_TYPE=qemu
+LOGFILE=/opt/stack/logs/devstacklog.txt
+LOG_COLOR=False
+#NETWORK_GATEWAY=10.1.0.1
+NOVA_VNC_ENABLED=True
+NOVNC_FROM_PACKAGE=True
+OVERRIDE_PUBLIC_BRIDGE_MTU=1400
+PUBLIC_BRIDGE_MTU=1450
+#PUBLIC_NETWORK_GATEWAY=172.24.5.1
+Q_AGENT=openvswitch
+Q_ML2_TENANT_NETWORK_TYPE=vxlan
+RABBIT_PASSWORD=secretrabbit
+#SERVICE_HOST=10.209.1.30
+SERVICE_PASSWORD=secretservice
+SWIFT_ENABLE_TEMPURLS=True
+SWIFT_HASH=1234123412341234
+SWIFT_REPLICAS=1
+SWIFT_START_ALL_SERVICES=False
+SWIFT_TEMPURL_KEY=secretkey
+#TEMPEST_PLUGINS='/home/zuul/src/git.openstack.org/openstack/ironic-tempest-plugin'
+VERBOSE=True
+VERBOSE_NO_TIMESTAMP=True
+VIRT_DRIVER=ironic
+VNCSERVER_LISTEN=0.0.0.0
+VNCSERVER_PROXYCLIENT_ADDRESS=$HOST_IP
+#LIBS_FROM_GIT=nova,ironic-tempest-plugin,ironic-python-agent,ironic,neutron,tempest,swift,virtualbmc,placement,cinder,glance,keystone,devstack,requirements,pyghmi
+
+[[test-config|$TEMPEST_CONFIG]]
+[compute]
+min_compute_nodes = 1
+[[post-config|$NEUTRON_CONF]]
+[DEFAULT]
+global_physnet_mtu = 1450
+

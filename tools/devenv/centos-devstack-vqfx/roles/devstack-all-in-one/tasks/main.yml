@@ -1,0 +1,113 @@
+---
+- name: clone devstack repo
+  git:
+    repo: https://opendev.org/openstack-dev/devstack
+    dest: "{{ devstack_dir }}"
+
+- name: "WORKAROUND: Install virtualenv 16.2.0, the latest doesn't work"
+  pip:
+    name: virtualenv==16.2.0
+    state: present
+  become: yes
+
+- name: flush iptables
+  iptables: flush=true
+  become: yes
+
+- name: install bridge-utils
+  yum:
+    name: bridge-utils
+  become: true
+
+- set_fact:
+    controller_host_ip: "{{ hostvars.controller.ansible_default_ipv4.address }}"
+
+- name: install arp-scan
+  yum:
+    name: arp-scan
+  become: true
+
+- name: find the appliance ip
+  shell: "arp-scan 192.168.121.0/24 | grep 52:54:00:ea:92:ca | awk '{print $1}'"
+  register: _appliance_ip
+  become: true
+
+- set_fact:
+    appliance_ip: "{{ _appliance_ip.stdout }}"
+
+- name: create local.conf for controller
+  template:
+    src: local.conf.j2
+    #src: standalone.local.conf.j2
+    dest: "{{ devstack_dir }}/local.conf"
+    mode: 0644
+
+- name: install iptables
+  yum:
+    name: iptables-services
+  become: true
+
+- name: install libvirt
+  yum:
+    name: libvirt
+  become: true
+
+- name: stop firewalld
+  service:
+    name: firewalld
+    state: stopped
+  become: true
+
+- name: start iptables
+  service:
+    name: iptables
+    state: stopped
+  become: true
+
+- name: start libvirtd
+  service:
+    name: libvirtd
+    state: started
+  become: true
+
+- name: destroy the libvirt default network
+  command: virsh net-destroy default
+  become: true
+
+- name: undefine the libvirt default network
+  command: virsh net-undefine default
+  become: true
+
+- name: flush the libvirt/other REJECT rules out of iptables
+  shell: iptables-save | grep -v REJECT | iptables-restore
+  become: true
+
+- name: save the flushed rules
+  command: service iptables save
+  become: true
+
+- name: restart libvirtd
+  service:
+    name: libvirtd
+    state: restarted
+  become: true
+
+- name: add the vagrant user to the libvirt group
+  command: usermod --append --groups libvirt vagrant
+  become: true
+
+- name: install ovs
+  yum:
+    name: openvswitch
+  become: true
+
+- name: start ovs
+  service:
+    name: openvswitch
+    state: started
+  become: true
+
+- name: stack the stack
+  command: ./stack.sh
+  args:
+    chdir: "{{ devstack_dir }}"

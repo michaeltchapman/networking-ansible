@@ -1,0 +1,20 @@
+---
+- name: install pip for personal use via yum
+  yum:
+    name: "python,python-pip,python-devel"
+    state: present
+  become: yes
+  when: ansible_distribution == 'CentOS'
+
+- name: install packages for personal use via apt
+  apt:
+    name: "python,python-pip,python-dev"
+    state: present
+  become: yes
+  when: ansible_distribution == 'Ubuntu'
+
+- name: upgrade pip if available
+  pip:
+    name: pip
+    state: latest
+  become: yes

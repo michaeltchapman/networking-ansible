@@ -1,0 +1,33 @@
+- name: install bridge utils
+  package:
+    name: "bridge-utils"
+    state: present
+  become: true
+
+- name: create connection test script
+  template:
+    src: test_connection.sh.j2
+    dest: "/root/test_connection.sh"
+  become: true
+
+- name: create connection test teardown script
+  template:
+    src: test_connection_teardown.sh.j2
+    dest: "/root/test_connection_teardown.sh"
+  become: true
+
+- name: run connection test script
+  shell: "bash -x /root/test_connection.sh"
+  become: true
+
+- name: test port 1
+  shell: "ip netns exec vbmns0 ping 192.168.201.101 -c 1"
+  become: true
+
+- name: test port 2
+  shell: "ip netns exec vbmns1 ping 192.168.201.100 -c 1"
+  become: true
+
+- name: run connection test teardown script
+  shell: "bash -x /root/test_connection_teardown.sh"
+  become: true

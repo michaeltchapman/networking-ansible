@@ -1,0 +1,20 @@
+---
+devstack_dir: /home/vagrant/devstack
+openrc_admin: "source {{ devstack_dir }}/openrc admin"
+openrc_user: "source {{ devstack_dir }}/openrc"
+service_password: password
+python3:
+  package_requirements: sqlite-devel,zlib-devel,bzip2-devel,openssl-devel,ncurses-devel,sqlite-devel,readline-devel,tk-devel,gdbm-devel,db4-devel,libpcap-devel,xz-devel
+  source_url: https://www.python.org/ftp/python/3.5.1/Python-3.5.1.tgz
+  source_dir: /tmp/Python-3.5.1
+  version: 3.5
+
+appliance_os: junos
+appliance_mac: "52:54:00:ea:92:ca"
+appliance_user: root
+appliance_pass: Juniper
+
+node_count: 4
+
+interim_string: "{% for item in range(0,node_count) %}node-{{item}} {% endfor %}"
+node_list: "{{ interim_string.split() }}"

@@ -1,0 +1,242 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# management ports between the vqfx and the routing engine
+mgmtp1 = [8001, 9001]
+mgmtp2 = [8002, 9002]
+# controller to virtual appliance
+ctrlp = [8003, 9003]
+# virtual baremetal to virtual appliance
+bmp0 = [8004, 9004]
+bmp1 = [8005, 9005]
+bmp2 = [8006, 9006]
+bmp3 = [8007, 9007]
+bmp4 = [8008, 9008]
+bmp5 = [8009, 9009]
+bmp6 = [8010, 9010]
+bmp7 = [8011, 9011]
+bmp8 = [8012, 9012]
+bmp9 = [8013, 9013]
+
+vqfx_mac = "52:54:00:ea:92:ca"
+
+pfeboxname = "vqfx10k-pfe"
+reboxname = "junos"
+
+# All Vagrant configuration is done below. The "2" in Vagrant.configure
+# configures the configuration version (we support older styles for
+# backwards compatibility). Please don't change it unless you know what
+# you're doing.
+Vagrant.configure("2") do |config|
+  # The most common configuration options are documented and commented below.
+  # For a complete reference, please see the online documentation at
+  # https://docs.vagrantup.com.
+
+  # Every Vagrant development environment requires a box. You can search for
+  # boxes at https://atlas.hashicorp.com/search.
+  if Vagrant.has_plugin?("vagrant-cachier")
+    config.cache.scope = :box
+  end
+
+  config.vm.define "vqfx-pfe" do |vqfxpfe|
+    vqfxpfe.vm.box = pfeboxname
+    vqfxpfe.vm.guest = "openbsd"
+
+    vqfxpfe.ssh.username = "root"
+    vqfxpfe.ssh.password = "no"
+
+    vqfxpfe.vm.provider :libvirt do |domain|
+      domain.nic_model_type = "e1000"
+      domain.disk_bus = 'ide'
+      domain.cpus = 2
+      domain.memory = 2048
+      domain.nic_adapter_count = 16
+    end
+
+    vqfxpfe.vm.synced_folder '.', '/vagrant', disabled: true
+    vqfxpfe.ssh.insert_key = false
+
+    vqfxpfe.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => mgmtp1[1],
+      :libvirt__tunnel_local_port => mgmtp1[0]
+    vqfxpfe.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => mgmtp2[1],
+      :libvirt__tunnel_local_port => mgmtp2[0]
+  end
+
+  config.vm.define "vqfx" do |vqfx|
+    vqfx.vm.box = reboxname
+    vqfx.vm.guest = "openbsd"
+
+    vqfx.vm.synced_folder '.', '/vagrant', disabled: true
+
+    vqfx.ssh.username = "root"
+    vqfx.ssh.password = "Juniper"
+    vqfx.ssh.shell = "cli"
+
+    vqfx.vm.provider :libvirt do |domain|
+      domain.disk_bus = 'ide'
+      domain.nic_model_type = "e1000"
+      domain.cpus = 2
+      domain.memory = 2048
+      domain.management_network_mac = vqfx_mac
+      domain.nic_adapter_count = 16
+    end
+
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => mgmtp1[0],
+      :libvirt__tunnel_local_port => mgmtp1[1]
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => mgmtp2[0],
+      :libvirt__tunnel_local_port => mgmtp2[1]
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => ctrlp[0],
+      :libvirt__tunnel_local_port => ctrlp[1]
+
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp0[0],
+      :libvirt__tunnel_local_port => bmp0[1]
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp1[0],
+      :libvirt__tunnel_local_port => bmp1[1]
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp2[0],
+      :libvirt__tunnel_local_port => bmp2[1]
+
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp3[0],
+      :libvirt__tunnel_local_port => bmp3[1]
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp4[0],
+      :libvirt__tunnel_local_port => bmp4[1]
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp5[0],
+      :libvirt__tunnel_local_port => bmp5[1]
+
+
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp6[0],
+      :libvirt__tunnel_local_port => bmp6[1]
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp7[0],
+      :libvirt__tunnel_local_port => bmp7[1]
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp8[0],
+      :libvirt__tunnel_local_port => bmp8[1]
+
+    vqfx.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp9[0],
+      :libvirt__tunnel_local_port => bmp9[1]
+
+    vqfx.vm.provision :ansible do |ansible|
+      ansible.playbook = "vqfx.yml"
+    end
+  end
+
+  config.vm.define "controller" do |controller|
+    controller.vm.hostname = "devstack"
+    controller.vm.box = "centos/7"
+
+    controller.vm.provider :libvirt do |domain|
+      domain.cpus = 2
+      domain.memory = 8192
+      domain.nic_adapter_count = 16
+    end
+
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => ctrlp[1],
+      :libvirt__tunnel_local_port => ctrlp[0]
+
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp0[1],
+      :libvirt__tunnel_local_port => bmp0[0]
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp1[1],
+      :libvirt__tunnel_local_port => bmp1[0]
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp2[1],
+      :libvirt__tunnel_local_port => bmp2[0]
+
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp3[1],
+      :libvirt__tunnel_local_port => bmp3[0]
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp4[1],
+      :libvirt__tunnel_local_port => bmp4[0]
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp5[1],
+      :libvirt__tunnel_local_port => bmp5[0]
+
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp6[1],
+      :libvirt__tunnel_local_port => bmp6[0]
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp7[1],
+      :libvirt__tunnel_local_port => bmp7[0]
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp8[1],
+      :libvirt__tunnel_local_port => bmp8[0]
+
+    controller.vm.network "private_network",
+      :auto_config => false,
+      :libvirt__tunnel_type => "udp",
+      :libvirt__tunnel_port => bmp9[1],
+      :libvirt__tunnel_local_port => bmp9[0]
+
+    controller.vm.provision :ansible do |ansible|
+      ansible.playbook = "controller.yml"
+      ansible.verbose = "v"
+    end
+  end
+
+end

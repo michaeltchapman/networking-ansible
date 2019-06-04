@@ -1,0 +1,8 @@
+brctl delbr vbm0
+brctl delbr vbm1
+ip link del dev veth0
+ip link del dev veth1
+ip link del dev br-vbm0
+ip link del dev br-vbm1
+ip netns del vbmns0
+ip netns del vbmns1

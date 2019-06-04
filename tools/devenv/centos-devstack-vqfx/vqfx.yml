@@ -1,0 +1,6 @@
+---
+- name: call configuration scripts for vqfx box
+  hosts: vqfx
+  gather_facts: no
+  roles:
+    - vqfx

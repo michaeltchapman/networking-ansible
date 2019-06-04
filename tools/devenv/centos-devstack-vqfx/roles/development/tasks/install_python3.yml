@@ -1,0 +1,46 @@
+---
+- name: test if python3 is installed
+  command: python3 -c ""
+  ignore_errors: true
+  register: python3_installed
+
+- block:
+    - name: install SQLlite devel for Python 3 compilation
+      package:
+        name: "{{ python3.package_requirements }}"
+        state: present
+      become: yes
+
+    - name: download Python 3 sources
+      get_url:
+        url: "{{ python3.source_url }}"
+        dest: "{{ python3.source_dir }}.tgz"
+
+    - name: untar Python 3 sources
+      unarchive:
+        src: "{{ python3.source_dir }}.tgz"
+        dest: /tmp
+        remote_src: yes
+
+    - name: compile Python 3
+      command: ./configure --prefix=/usr/local --enable-loadable-sqlite-extensions --with-zlib=/usr/include
+      args:
+        chdir: "{{ python3.source_dir }}"
+
+    - name: install Python 3
+      command: make altinstall
+      args:
+        chdir: "{{ python3.source_dir }}"
+      become: yes
+
+    - name: get python3 executable path
+      command: "which python{{ python3.version }}"
+      register: python3_exec
+
+    - name: make a python3 executable symlink
+      file:
+        src: "{{ python3_exec.stdout }}"
+        dest: "{{ python3_exec.stdout | dirname }}/python3"
+        state: link
+      become: yes
+  when: python3_installed.rc != 0

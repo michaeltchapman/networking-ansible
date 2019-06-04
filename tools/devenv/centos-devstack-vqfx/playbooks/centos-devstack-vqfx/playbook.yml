@@ -1,0 +1,5 @@
+---
+- name: create environment with all-in-one CentOS and vQFX
+  hosts: localhost
+  roles:
+    - vqfx-controller-bm
