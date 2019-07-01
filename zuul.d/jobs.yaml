@@ -65,7 +65,7 @@
         Q_PLUGIN: ml2
         SWIFT_ENABLE_TEMPURLS: True
         SWIFT_TEMPURL_KEY: secretkey
-        TEMPEST_PLUGINS: "'{{ ansible_user_dir }}/src/opendev.org/openstack/ironic-tempest-plugin'"
+        TEMPEST_PLUGINS: "{{ ansible_user_dir }}/src/opendev.org/openstack/ironic-tempest-plugin"
         TENANT_VLAN_RANGE: 100:150
         VIRT_DRIVER: ironic
       devstack_plugins:
