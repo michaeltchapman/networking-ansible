@@ -16,6 +16,7 @@
 from neutron.db import provisioning_blocks
 from neutron.plugins.ml2.common import exceptions as ml2_exc
 from neutron_lib.api.definitions import portbindings
+from neutron_lib.api.definitions import trunk_details
 from neutron_lib.callbacks import resources
 from neutron_lib.plugins.ml2 import api as ml2api
 from oslo_log import log as logging
@@ -23,7 +24,6 @@ from oslo_log import log as logging
 from networking_ansible import api
 from networking_ansible import config
 from networking_ansible.ml2 import exceptions
-
 
 LOG = logging.getLogger(__name__)
 
@@ -287,9 +287,15 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
 
         # Assign port to network
         try:
-            self.ansnet.update_access_port(switch_name,
-                                           switch_port,
-                                           segmentation_id)
+            if trunk_details.TRUNK_DETAILS in port:
+                sub_ports = port[trunk_details.TRUNK_DETAILS]['sub_ports']
+                trunked_vlans = [sp['segmentation_id'] for sp in sub_ports]
+                self.ansnet.conf_trunk_port(switch_name, switch_port,
+                                            segmentation_id, trunked_vlans)
+            else:
+                self.ansnet.update_access_port(switch_name,
+                                               switch_port,
+                                               segmentation_id)
             context.set_binding(segments[0][ml2api.ID],
                                 portbindings.VIF_TYPE_OTHER, {})
             LOG.info('Port {neutron_port} has been plugged into '

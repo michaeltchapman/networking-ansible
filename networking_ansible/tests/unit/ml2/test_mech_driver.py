@@ -23,6 +23,7 @@ from neutron.plugins.ml2.common import exceptions as ml2_exc
 from neutron.tests.unit.plugins.ml2 import test_plugin
 from neutron_lib.api.definitions import portbindings
 from neutron_lib.api.definitions import provider_net
+from neutron_lib.api.definitions import trunk_details
 import webob.exc
 
 from networking_ansible import api
@@ -88,6 +89,19 @@ class TestBindPort(base.NetworkingAnsibleTestCase):
                           self.mech.bind_port,
                           self.mock_port_context)
         mock_update_access_port.assert_not_called()
+
+    @mock.patch.object(api.NetworkingAnsible, 'conf_trunk_port')
+    def test_bind_port_trunk_port(self,
+                                  mock_conf_trunk_port,
+                                  mock_prov_blks,
+                                  mock_update_access_port):
+        td = {'sub_ports': [{'segmentation_id': self.testsegid2}]}
+        self.mock_port_context.current[trunk_details.TRUNK_DETAILS] = td
+        self.mech.bind_port(self.mock_port_context)
+        mock_conf_trunk_port.assert_called_once_with(self.testhost,
+                                                     self.testport,
+                                                     self.testsegid,
+                                                     [self.testsegid2])
 
 
 class TestIsPortSupported(base.NetworkingAnsibleTestCase):
