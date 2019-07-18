@@ -1,0 +1,217 @@
+# Ironic devstack will create virtual baremetals and plug them into an ovs
+# bridge called brbm. We will instead plug them into their own separate
+# linux bridges, and connect each bridge to an interface that has an
+# underlying UDP patch to a virtual appliance
+#
+#- name: add virtualbaremetal bridges
+#  command: "brctl addbr {{ item }}"
+#  with_items:
+#    - vbm0
+#    - vbm1
+#  become: true
+#
+- name: add virtualbaremetal bridges
+  command: "brctl addbr vbm{{ item }}"
+  become: true
+  with_sequence: count={{node_count}} start=0
+
+- name: remove ovs ports
+  shell: "ovs-vsctl del-port ovs-node-{{ item }}i1; ovs-vsctl del-port ovs-node-{{ item }}i2"
+  with_sequence: count={{node_count}} start=0
+  become: true
+
+- name: add virtualbaremetal veth pairs to bridges
+  command: "brctl addif vbm{{ item }} ovs-node-{{ item }}i1"
+  with_sequence: count={{node_count}} start=0
+  become: true
+
+- name: add virtualbaremetal bridges to ethernet interfaces
+  command: "brctl addif vbm{{ item }} eth{{ item | int + 2 }}"
+  with_sequence: count={{node_count}} start=0
+  become: true
+
+- name: set bridges up
+  command: "ip link set vbm{{ item }} up"
+  with_sequence: count={{node_count}} start=0
+  become: true
+
+- name: set MTU on all ethernet ports
+  command: "ip link set {{ item }} mtu 1450"
+  with_items:
+    - eth0
+    - eth1
+    - eth2
+    - eth3
+  become: true
+
+- name: create clean ports script
+  template:
+    src: clean_ports.sh.j2
+    dest: "{{ devstack_dir }}/clean_ports.sh"
+
+- name: run clean portscript
+  shell: "bash {{ devstack_dir }}/clean_ports.sh"
+
+- name: connect eth1 (controller provisioning) to its appliance port
+  command: "ovs-vsctl add-port br-prov eth1"
+  become: true
+
+- name: find provisioning network
+  shell: "{{ openrc_admin }} && openstack network list | grep provisioning"
+  ignore_errors: true
+  register: provisioning_network
+
+- name: create provisioning network
+  shell: "{{ openrc_admin }}  && openstack network create --external --share --provider-network-type flat --provider-physical-network provisioning provisioning"
+  when: provisioning_network.rc != 0
+
+- name: find provisioning subnet
+  shell: "{{ openrc_admin }}  && openstack subnet list | grep provisioning"
+  ignore_errors: true
+  register: provisioning_subnet
+
+- name: create provisioning subnet
+  shell: "{{ openrc_admin }}  && openstack subnet create --network provisioning --subnet-range 192.168.2.0/24 --gateway 192.168.2.1 --allocation-pool start=192.168.2.100,end=192.168.2.200 provisioning-subnet"
+  when: provisioning_subnet.rc != 0
+
+- name: find default router
+  shell:  "{{ openrc_admin }} && openstack router list | grep default-router"
+  ignore_errors: true
+  register: default_router
+
+- name: create router
+  shell: "{{ openrc_admin }} && openstack router create default-router"
+  when: default_router.rc != 0
+
+# (michchap) I don't think this is needed because Ironic adds a gateway to the
+# provisioning interface when in multinode mode
+#- name: add provisioning subnet to router
+#  shell: "{{ openrc_admin }} && openstack router add subnet default-router provisioning-subnet"
+  when: default_router.rc != 0
+
+- name: find tenant network
+  shell:  "{{ openrc_admin }} && openstack network list | grep tenant-net"
+  ignore_errors: true
+  register: tenant_net
+
+- name: create tenant network
+  shell: "{{ openrc_admin }} && openstack network create --provider-network-type vlan --provider-physical-network provisioning tenant-net"
+  when: tenant_net.rc != 0
+
+- name: find tenant subnet
+  shell:  "{{ openrc_admin }} && openstack subnet list | grep tenant-subnet"
+  ignore_errors: true
+  register: tenant_subnet
+
+- name: create tenant subnet
+  shell: "{{ openrc_admin }} && openstack subnet create --network tenant-net --subnet-range 192.168.3.0/24     --allocation-pool start=192.168.3.10,end=192.168.3.20 tenant-subnet"
+  when: tenant_subnet.rc != 0
+
+- name: add tenant subnet to router
+  shell: "{{ openrc_admin }} && openstack router add subnet default-router tenant-subnet"
+  when: tenant_subnet.rc != 0
+
+## Provisioning flavor configuration
+- name: find baremetal flavor
+  shell: "{{ openrc_admin }}  && openstack flavor list | grep baremetal"
+  ignore_errors: true
+  register: baremetal_flavor
+
+- name: create flavor
+  shell: "{{ openrc_admin }}  && openstack flavor create --ram 1024 --disk 20 --vcpus 1 baremetal"
+  when: baremetal_flavor.rc != 0
+- name: set flavor profile
+  shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property \"capabilities:profile\"=\"baremetal\" --property capabilities:boot_option=\"local\""
+  when: baremetal_flavor.rc != 0
+
+- name: set flavor CUSTOM_BAREMETAL
+  shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property resources:CUSTOM_BAREMETAL=1"
+  when: baremetal_flavor.rc != 0
+
+- name: set flavor vcpu
+  shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property resources:VCPU=0"
+  when: baremetal_flavor.rc != 0
+
+- name: set flavor memory
+  shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property resources:MEMORY_MB=0"
+  when: baremetal_flavor.rc != 0
+
+- name: set flavor disk gb
+  shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property resources:DISK_GB=0"
+  when: baremetal_flavor.rc != 0
+
+- name: find baremetal host aggregate
+  shell: "{{ openrc_admin }}  && openstack aggregate list | grep baremetal-hosts"
+  ignore_errors: true
+  register: baremetal_aggregate
+
+- name: create baremetal host aggregate
+  shell: "{{ openrc_admin }}  && openstack aggregate create --property baremetal=true baremetal-hosts"
+  when: baremetal_aggregate.rc != 0
+
+- name: find virtual host aggregate
+  shell: "{{ openrc_admin }}  && openstack aggregate list | grep virtual-hosts"
+  ignore_errors: true
+  register: virtual_aggregate
+
+- name: create virtual host aggregate
+  shell: "{{ openrc_admin }}  && openstack aggregate create --property baremetal=false virtual-hosts"
+  when: virtual_aggregate.rc != 0
+
+- name: find controller in baremetal aggregate
+  shell: "{{ openrc_admin }}  && openstack aggregate show baremetal-hosts | grep overcloud-controller"
+  ignore_errors: true
+  register: controller_aggregate
+
+- name: add controller to baremetal aggregate
+  shell: "{{ openrc_admin }}  && openstack aggregate add host baremetal-hosts devstack"
+  when: controller_aggregate.rc != 0
+
+- name: set baremetal property in flavor
+  shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property baremetal=true"
+  when: baremetal_flavor.rc != 0
+
+- name: find virtual flavor
+  shell: "{{ openrc_admin }}  && openstack flavor list | grep virtual"
+  ignore_errors: true
+  register: virtual_flavor
+
+- name: create virtual flavor
+  shell: "{{ openrc_admin }}  && openstack flavor create --ram 1024 --disk 20 --vcpus 1 virtual"
+  when: virtual_flavor.rc != 0
+
+- name: set virtual flavor to baremetal false
+  shell: "{{ openrc_admin }}  && openstack flavor set virtual --property baremetal=\"false\""
+  when: virtual_flavor.rc != 0
+
+- name: configure baremetal
+  include: configure_node.yml nodename="node-{{item}}"
+  with_sequence: count={{node_count}} start=0
+
+- name: install crudini
+  yum:
+    name: crudini
+  become: true
+
+- name: enable automatic cleaning in ironic
+  command: crudini --set /etc/ironic/ironic.conf conductor automated_clean True
+  become: true
+
+- name: restart ironic conductor
+  service:
+    name: devstack@ir-cond
+    state: restarted
+  become: true
+
+- name: restart ironic api
+  service:
+    name: devstack@ir-api
+    state: restarted
+  become: true
+
+- name: clean baremetal
+  include: clean_node.yml nodename="node-{{item}}"
+  with_sequence: count={{node_count}} start=0
+
+#- name: boot server
+#  shell: "{{ openrc_admin }} && openstack server create --image cirros-0.4.0-x86_64-disk --flavor baremetal --nic net-id=$(openstack network show tenant-net -f value -c id) instance1"

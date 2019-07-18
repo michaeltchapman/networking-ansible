@@ -1,0 +1,5 @@
+#!/bin/bash
+{{ openrc_admin }}
+for port in $(openstack baremetal port list | grep 52 | cut -d '|' -f 2); do
+  openstack baremetal port delete $port
+done

@@ -1,0 +1,32 @@
+---
+- name: install vim for personal use via yum
+  yum:
+    name: vim-enhanced
+    state: latest
+  become: yes
+  when: ansible_distribution == 'CentOS'
+
+- name: install vim for personal use via apt
+  apt:
+    name: "vim"
+    state: present
+  become: yes
+  when: ansible_distribution == 'Ubuntu'
+
+- name: install packages for peresonal use via pip
+  pip:
+    name: 'ropevim,flake8'
+  become: yes
+
+- name: copy .vimrc to home directory
+  copy:
+    src: "{{ my_settings_dir }}/.vimrc"
+    dest: "{{ ansible_env.HOME }}/.vimrc"
+  when: my_settings_dir is defined
+
+- name: copy .vim directory to home directory
+  copy:
+    src: "{{ my_settings_dir }}/.vim"
+    dest: "{{ ansible_env.HOME }}"
+  when: my_settings_dir is defined
+...

@@ -1,0 +1,36 @@
+#!/bin/bash
+
+brctl addbr vbm0
+brctl addbr vbm1
+
+ip netns add vbmns0
+ip netns add vbmns1
+
+brctl addif vbm0 eth2
+brctl addif vbm1 eth3
+
+ip link add veth0 type veth peer name br-vbm0
+ip link add veth1 type veth peer name br-vbm1
+
+ip link set veth0 netns vbmns0
+ip link set veth1 netns vbmns1
+
+ip netns exec vbmns0 ip addr add 192.168.201.100/24 dev veth0
+ip netns exec vbmns1 ip addr add 192.168.201.101/24 dev veth1
+
+ip link set vbm0 up
+ip link set vbm1 up
+ip link set br-vbm0 up
+ip link set br-vbm1 up
+
+ip netns exec vbmns0 ip link set veth0 up
+ip netns exec vbmns0 ip link set lo up
+ip netns exec vbmns1 ip link set veth1 up
+ip netns exec vbmns1 ip link set lo up
+
+brctl addif vbm0 br-vbm0
+brctl addif vbm1 br-vbm1
+
+#ip netns exec vbmns0 ping 192.168.201.101 -c 1
+#ip netns exec vbmns1 ping 192.168.201.100 -c 1
+

@@ -1,0 +1,11 @@
+---
+baremetal_nodes:
+  - name: bm1
+    virtualbmc_port: 6230
+  - name: bm2
+    virtualbmc_port: 6231
+
+# devstack guest can access vbmc via the libvirt default network
+vbmc_address: 192.168.122.1
+
+libvirt_uri: "qemu://session"

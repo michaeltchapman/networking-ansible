@@ -1,0 +1,7 @@
+---
+- name: copy bashrc to home directory
+  copy:
+    src: "{{ my_settings_dir }}/.bashrc"
+    dest: "{{ ansible_env.HOME }}/.bashrc"
+  when: my_settings_dir is defined
+...

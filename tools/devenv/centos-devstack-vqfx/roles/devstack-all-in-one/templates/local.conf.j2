@@ -1,0 +1,151 @@
+[[local|localrc]]
+
+#enable_plugin networking-ansible https://opendev.org/openstack/networking-ansible
+# (michchap) removeme when gate is unbroken
+enable_plugin networking-ansible https://github.com/michaeltchapman/networking-ansible
+
+enable_plugin ironic https://opendev.org/openstack/ironic
+
+disable_all_services
+enable_service g-reg
+enable_service rabbit
+#disable_service n-api
+enable_service n-api
+disable_service c-api
+enable_service g-api
+enable_service mysql
+enable_service tempest
+enable_service etcd3
+enable_service s-proxy
+enable_service q-dhcp
+enable_service n-api-meta
+disable_service nova
+disable_service tls-proxy
+enable_service q-l3
+disable_service c-sch
+enable_service n-novnc
+enable_service s-object
+enable_service peakmem_tracker
+enable_service n-cauth
+enable_service q-metering
+enable_service key
+enable_service n-cond
+enable_service s-container
+enable_service q-meta
+enable_service q-svc
+enable_service placement-api
+enable_service n-cpu
+enable_service s-account
+disable_service c-vol
+disable_service n-obj
+disable_service c-bak
+enable_service q-agt
+disable_service horizon
+disable_service cinder
+enable_service n-sch
+enable_service dstat
+
+HOST_IP={{ controller_host_ip }}
+
+#PASSWORDS
+PASSWORD={{ service_password }}
+MYSQL_PASSWORD=$PASSWORD
+SERVICE_TOKEN=$PASSWORD
+SERVICE_PASSWORD=$PASSWORD
+ADMIN_PASSWORD=$PASSWORD
+RABBIT_PASSWORD=$PASSWORD
+
+#BUILD_TIMEOUT=720
+CINDER_PERIODIC_INTERVAL=10
+DEBUG_LIBVIRT_COREDUMPS=True
+DEFAULT_INSTANCE_TYPE=baremetal
+#ERROR_ON_CLONE=True
+FIXED_RANGE=10.1.0.0/20
+FLOATING_RANGE=172.24.5.0/24
+FORCE_CONFIG_DRIVE=False
+INSTALL_TEMPEST=False
+IPV4_ADDRS_SAFE_TO_USE=10.1.0.0/20
+IRONIC_AUTOMATED_CLEAN_ENABLED=False
+IRONIC_BAREMETAL_BASIC_OPS=True
+IRONIC_BUILD_DEPLOY_RAMDISK=False
+IRONIC_CALLBACK_TIMEOUT=600
+IRONIC_DEFAULT_DEPLOY_INTERFACE=direct
+IRONIC_DEFAULT_RESCUE_INTERFACE=agent
+IRONIC_DEFAULT_BOOT_OPTION=local
+IRONIC_DEPLOY_DRIVER=ipmi
+IRONIC_ENABLED_DEPLOY_INTERFACES=iscsi,direct
+IRONIC_ENABLED_NETWORK_INTERFACES=noop,flat,neutron
+IRONIC_INSPECTOR_BUILD_RAMDISK=False
+IRONIC_RAMDISK_TYPE=tinyipa
+IRONIC_RPC_TRANSPORT=json-rpc
+IRONIC_TEMPEST_BUILD_TIMEOUT=720
+IRONIC_TEMPEST_WHOLE_DISK_IMAGE=False
+IRONIC_VM_COUNT={{ node_count }}
+IRONIC_VM_EPHEMERAL_DISK=1
+IRONIC_VM_LOG_DIR=/opt/stack/ironic-bm-logs
+IRONIC_VM_SPECS_RAM=384
+LIBVIRT_TYPE=qemu
+LOGFILE=/opt/stack/logs/devstacklog.txt
+LOG_COLOR=False
+#NETWORK_GATEWAY=10.1.0.1
+NOVA_VNC_ENABLED=True
+NOVNC_FROM_PACKAGE=True
+Q_AGENT=openvswitch
+Q_ML2_TENANT_NETWORK_TYPE=vxlan
+#SERVICE_HOST=10.209.1.30
+SWIFT_ENABLE_TEMPURLS=True
+SWIFT_HASH=1234123412341234
+SWIFT_REPLICAS=1
+SWIFT_START_ALL_SERVICES=False
+SWIFT_TEMPURL_KEY=secretkey
+#TEMPEST_PLUGINS='/home/zuul/src/opendev.org/openstack/ironic-tempest-plugin'
+VERBOSE=True
+VERBOSE_NO_TIMESTAMP=True
+VIRT_DRIVER=ironic
+VNCSERVER_LISTEN=0.0.0.0
+VNCSERVER_PROXYCLIENT_ADDRESS=$HOST_IP
+#LIBS_FROM_GIT=nova,ironic-tempest-plugin,ironic-python-agent,ironic,neutron,tempest,swift,virtualbmc,placement,cinder,glance,keystone,devstack,requirements,pyghmi
+
+PHYSICAL_NETWORK=provisioning
+IRONIC_PROVISION_NETWORK_NAME=provisioning
+IRONIC_PROVISION_PROVIDER_NETWORK_TYPE=vlan
+IRONIC_PROVISION_SEGMENTATION_ID=2
+# after devstack completes, connect this to eth1
+OVS_PHYSICAL_BRIDGE=br-prov
+
+NEUTRON_CREATE_INITIAL_NETWORKS=False
+
+Q_USE_PROVIDER_NETWORKING=False
+Q_USE_PROVIDERNET_FOR_PUBLIC=False
+
+[[test-config|$TEMPEST_CONFIG]]
+[compute]
+min_compute_nodes = 1
+
+[[post-config|/$Q_PLUGIN_CONF_FILE]]
+[ml2_type_vlan]
+network_vlan_ranges = provisioning:1:200
+[[post-config|/$Q_PLUGIN_CONF_FILE]]
+[ml2_type_flat]
+flat_networks = mgmt
+[[post-config|/$Q_PLUGIN_CONF_FILE]]
+[ml2]
+mechanism_drivers = openvswitch,ansible
+[[post-config|/$Q_PLUGIN_CONF_FILE]]
+[ml2]
+tenant_network_types = vlan
+[[post-config|/$Q_PLUGIN_CONF_FILE]]
+[ansible:testhost]
+ansible_network_os={{ appliance_os }}
+[[post-config|/$Q_PLUGIN_CONF_FILE]]
+[ansible:testhost]
+ansible_host={{ appliance_ip }}
+[[post-config|/$Q_PLUGIN_CONF_FILE]]
+[ansible:testhost]
+ansible_user={{ appliance_user }}
+[[post-config|/$Q_PLUGIN_CONF_FILE]]
+[ansible:testhost]
+ansible_ssh_pass={{ appliance_pass }}
+[[post-config|$NEUTRON_CONF]]
+[DEFAULT]
+global_physnet_mtu = 1450

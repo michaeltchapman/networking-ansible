@@ -1,0 +1,43 @@
+---
+- name: update all packages (CentOS)
+  yum:
+    name: '*'
+    update_cache: yes
+    state: latest
+  become: yes
+  register: updated_centos
+  when: ansible_distribution == 'CentOS'
+
+- name: install aptitude (Ubuntu)
+  package:
+    name: "aptitude"
+    state: present
+  become: yes
+  when: ansible_distribution == 'Ubuntu'
+
+- name: update all packages (Ubuntu)
+  apt:
+    update_cache: yes
+    upgrade: safe
+    state: latest
+  become: yes
+  register: updated_ubuntu
+  when: ansible_distribution == 'Ubuntu'
+
+- block:
+    - name: reboot host
+      command: sleep 2 && /sbin/reboot
+      async: 1
+      poll: 0
+      become: yes
+
+    - name: wait for host to be ready
+      local_action: wait_for
+      args:
+        host: "{{ ansible_host }}"
+        port: "{{ ansible_port | default(22) }}"
+        state: started
+        delay: 60
+        timeout: 180
+  when: updated_centos.changed or updated_ubuntu.changed
+...

@@ -1,0 +1,14 @@
+node_port_map:
+  node-0: xe-0/0/1
+  node-1: xe-0/0/2
+  node-2: xe-0/0/3
+  node-3: xe-0/0/4
+  node-4: xe-0/0/5
+  node-5: xe-0/0/6
+  node-6: xe-0/0/7
+  node-7: xe-0/0/8
+  node-8: xe-0/0/9
+  node-9: xe-0/0/10
+devstack_dir: /home/vagrant/devstack
+openrc_admin: "source {{ devstack_dir }}/openrc admin &> /dev/null"
+openrc_user: "source {{ devstack_dir }}/openrc &> /dev/null"

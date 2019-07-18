@@ -1,0 +1,15 @@
+---
+- name: install packages for peresonal use via pip
+  pip:
+    name: 'flake8,pep8,ipython,pylint'
+  become: yes
+
+- name: install ipdb specific version
+  pip:
+    name: ipdb
+    version: 0.10.2
+  become: yes
+
+- name: install python 3 from source
+  include_tasks: install_python3.yml
+  when: install_python3

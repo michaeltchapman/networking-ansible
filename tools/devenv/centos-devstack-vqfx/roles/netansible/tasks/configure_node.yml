@@ -1,0 +1,35 @@
+# configure an individual node for ansible-networking + ironic
+# nodename == name of node in virsh
+
+# create node
+# /opt/stack/ironic/devstack/tools/ironic/scripts/create-node.sh
+
+- name: set boot local and profile baremetal
+  shell: "{{ openrc_admin }} && openstack baremetal node set {{ nodename }} --property capabilities=\"boot_option:local,profile:baremetal\""
+
+- name: set network neutron
+  shell: "{{ openrc_admin }} && openstack baremetal node set {{ nodename }} --network-interface neutron"
+
+- name: set resource class
+  shell: "{{ openrc_admin }} admin && openstack baremetal node set {{ nodename }} --resource-class baremetal"
+
+- name: get node mac address
+  shell: "virsh dumpxml {{ nodename }} | grep 'mac address' | head -n 1 | cut -d \"'\" -f 2"
+  become: true
+  register: ironic_bm_mac
+
+- name: get node uuid
+  shell: "{{ openrc_admin }} && openstack baremetal node list | grep {{ nodename }} | cut -d '|' -f 2 | tr -d '[:space:]'"
+  become: true
+  register: ironic_bm_uuid
+
+- name: find baremetal port
+  shell: "{{ openrc_admin }} && openstack baremetal port list | grep {{ ironic_bm_mac.stdout }}"
+  register: ironic_bm_port
+  become: true
+  ignore_errors: true
+
+- name: create baremetal port
+  shell: "{{ openrc_admin }} && openstack baremetal port create {{ ironic_bm_mac.stdout }} --node {{ ironic_bm_uuid.stdout }} --local-link-connection switch_id=00:00:00:00:00:00 --local-link-connection switch_info=testhost --local-link-connection port_id={{ node_port_map[nodename]}}"
+  become: true
+  when: ironic_bm_port.rc != 0

@@ -1,0 +1,31 @@
+---
+- block:
+    - name: check if it is possible to connect to the switch via ssh
+      shell: "ssh -i {{ hostvars.vqfx.ansible_ssh_private_key_file }} root@{{ hostvars.vqfx.ansible_host }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
+      ignore_errors: true
+      register: ssh_attempt
+
+    - block:
+        - name: check if public key exists
+          stat:
+            path: "{{ hostvars.vqfx.ansible_ssh_private_key_file }}.pub"
+          register: ssh_public_stat
+
+        - name: generate public key from the private key if does not exist
+          command: "ssh-keygen -y -f {{ hostvars.vqfx.ansible_ssh_private_key_file }}"
+          register: ssh_public_key
+          when: not ssh_public_stat.stat.exists
+
+        - name: copy ssh-key to the box
+          shell: |
+            expect -c "
+            spawn bash -c \"ssh root@{{ hostvars.vqfx.ansible_host }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null\"
+            expect \"Password:\"
+            send \"Juniper\r\"
+            expect \"root@.*:RE:0%\"
+            send \"echo '{{ ssh_public_key.stdout }}' >> ~/.ssh/authorized_keys\r\"
+            expect \"root@.*:RE:0%\"
+            send \"exit\r\"
+            "
+      when: ssh_attempt.rc != 0
+  delegate_to: localhost
