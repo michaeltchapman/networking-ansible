@@ -1,6 +1,7 @@
 [ml2_ansible]
-# currently no config options available
-# in this general section for the driver
+
+# backend to use for tooz coordination
+coordination_uri = etcd://127.0.0.1:2379
 
 
 #########

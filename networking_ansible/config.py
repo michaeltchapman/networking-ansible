@@ -20,6 +20,14 @@ from oslo_log import log as logging
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
+anet_opts = [
+    cfg.StrOpt('coordination_uri',
+               default='etcd://127.0.0.1:2379',
+               help="backend to use for tooz coordination")
+]
+
+cfg.CONF.register_opts(anet_opts, group='ml2_ansible')
+
 
 class Config(object):
 

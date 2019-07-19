@@ -1,5 +1,8 @@
 [[local|localrc]]
 
+HOST_IP={{ controller_host_ip }}
+PASSWORD={{ service_password }}
+
 #enable_plugin networking-ansible https://opendev.org/openstack/networking-ansible
 # (michchap) removeme when gate is unbroken
 enable_plugin networking-ansible https://github.com/michaeltchapman/networking-ansible
@@ -45,10 +48,8 @@ disable_service cinder
 enable_service n-sch
 enable_service dstat
 
-HOST_IP={{ controller_host_ip }}
 
 #PASSWORDS
-PASSWORD={{ service_password }}
 MYSQL_PASSWORD=$PASSWORD
 SERVICE_TOKEN=$PASSWORD
 SERVICE_PASSWORD=$PASSWORD
@@ -71,6 +72,7 @@ IRONIC_BUILD_DEPLOY_RAMDISK=False
 IRONIC_CALLBACK_TIMEOUT=600
 IRONIC_DEFAULT_DEPLOY_INTERFACE=direct
 IRONIC_DEFAULT_RESCUE_INTERFACE=agent
+IRONIC_ENABLED_RESCUE_INTERFACES=fake,agent,no-rescue
 IRONIC_DEFAULT_BOOT_OPTION=local
 IRONIC_DEPLOY_DRIVER=ipmi
 IRONIC_ENABLED_DEPLOY_INTERFACES=iscsi,direct
@@ -82,6 +84,10 @@ IRONIC_TEMPEST_BUILD_TIMEOUT=720
 IRONIC_TEMPEST_WHOLE_DISK_IMAGE=False
 IRONIC_VM_COUNT={{ node_count }}
 IRONIC_VM_EPHEMERAL_DISK=1
+# was 8
+IRONIC_HW_NODE_DISK=8
+# was 10
+IRONIC_VM_SPECS_DISK=10
 IRONIC_VM_LOG_DIR=/opt/stack/ironic-bm-logs
 IRONIC_VM_SPECS_RAM=384
 LIBVIRT_TYPE=qemu
@@ -117,6 +123,7 @@ NEUTRON_CREATE_INITIAL_NETWORKS=False
 
 Q_USE_PROVIDER_NETWORKING=False
 Q_USE_PROVIDERNET_FOR_PUBLIC=False
+Q_SERVICE_PLUGIN_CLASSES=segments,trunk
 
 [[test-config|$TEMPEST_CONFIG]]
 [compute]
@@ -148,4 +155,7 @@ ansible_user={{ appliance_user }}
 ansible_ssh_pass={{ appliance_pass }}
 [[post-config|$NEUTRON_CONF]]
 [DEFAULT]
-global_physnet_mtu = 1450
+global_physnet_mtu = 1400
+#[[post-config|/$Q_PLUGIN_CONF_FILE]]
+#[ml2_ansible]
+#coordination_uri=etcd://{{ controller_host_ip }}:2379

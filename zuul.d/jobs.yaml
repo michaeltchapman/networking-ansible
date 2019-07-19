@@ -107,6 +107,7 @@
         q-metering: True
         q-svc: True
         rabbit: True
+        etcd3: True
 
 - job:
     name: ironic-tempest-ipa-wholedisk-direct-tinyipa-multinode-networking-ansible
@@ -222,7 +223,7 @@
         q-metering: True
         q-svc: True
         rabbit: True
-
+        etcd3: True
     group-vars:
       subnode:
         devstack_localrc:

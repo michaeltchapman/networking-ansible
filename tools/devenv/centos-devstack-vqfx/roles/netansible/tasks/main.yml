@@ -36,7 +36,7 @@
   become: true
 
 - name: set MTU on all ethernet ports
-  command: "ip link set {{ item }} mtu 1450"
+  command: "ip link set {{ item }} mtu 1400"
   with_items:
     - eth0
     - eth1

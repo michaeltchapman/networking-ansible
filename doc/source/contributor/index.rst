@@ -7,3 +7,4 @@
 
    contributing
    provider
+   coordination

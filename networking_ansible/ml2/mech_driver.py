@@ -14,11 +14,19 @@
 #    under the License.
 
 
+import os
+
 from neutron.db import provisioning_blocks
+from neutron.objects.network import Network
+from neutron.objects.network import NetworkSegment
+from neutron.objects.ports import Port
+from neutron.objects.trunk import Trunk
+from neutron.plugins.ml2.common import exceptions as ml2_exc
 from neutron_lib.api.definitions import portbindings
 from neutron_lib.api.definitions import trunk_details
 from neutron_lib.callbacks import resources
 from neutron_lib.plugins.ml2 import api as ml2api
+from oslo_config import cfg
 from oslo_log import log as logging
 
 from networking_ansible import config
@@ -27,9 +35,14 @@ from networking_ansible import exceptions
 from network_runner import api as net_runr_api
 from network_runner.resources.inventory import Inventory
 
+from tooz import coordination
+
+
 LOG = logging.getLogger(__name__)
 
 ANSIBLE_NETWORKING_ENTITY = 'ANSIBLENETWORKING'
+CONF = config.CONF
+LLI = 'local_link_information'
 
 
 class AnsibleMechanismDriver(ml2api.MechanismDriver):
@@ -50,6 +63,17 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         _inv.deserialize({'all': {'hosts': self.ml2config.inventory}})
         self.net_runr = net_runr_api.NetworkRunner(_inv)
 
+        self.coordinator = coordination.get_coordinator(
+            cfg.CONF.ml2_ansible.coordination_uri,
+            '{}-{}'.format(CONF.host, os.getpid()))
+
+        # the heartbeat will have the default timeout of 30 seconds
+        # that can be changed per-driver. Both Redis and etcd drivers
+        # use 30 second timeouts.
+        self.coordinator.start(start_heart=True)
+        LOG.debug("Ansible ML2 coordination started via uri %s",
+                  cfg.CONF.ml2_ansible.coordination_uri)
+
     def create_network_postcommit(self, context):
         """Create a network.
 
@@ -62,36 +86,65 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         cause the deletion of the resource.
         """
 
-        network = context.current
-        network_id = network['id']
-        provider_type = network['provider:network_type']
-        segmentation_id = network['provider:segmentation_id']
-        # physnet = network['provider:physical_network']
+        # assuming all hosts
+        # TODO(radez): can we filter by physnets?
+        # TODO(michchap): we should be able to do each switch in parallel
+        # if it becomes a performance issue. switch topology might also
+        # open up options for filtering.
+        for host_name in self.ml2config.inventory:
+            host = self.ml2config.inventory[host_name]
+            if host.get('manage_vlans', True):
 
-        if provider_type == 'vlan' and segmentation_id:
-            # assuming all hosts
-            # TODO(radez): can we filter by physnets?
-            for host_name in self.ml2config.inventory:
-                host = self.ml2config.inventory[host_name]
-                if host.get('manage_vlans', True):
-                    # Create VLAN on the switch
-                    try:
-                        self.net_runr.create_vlan(host_name, segmentation_id)
-                        LOG.info('Network {net_id} has been added on ansible '
-                                 'host {host}'.format(
-                                     net_id=network['id'],
-                                     host=host_name))
+                network = context.current
+                network_id = network['id']
+                provider_type = network['provider:network_type']
+                segmentation_id = network['provider:segmentation_id']
 
-                    except Exception as e:
-                        # TODO(radez) I don't think there is a message returned
-                        #             from ansible runner's exceptions
-                        LOG.error('Failed to create network {net_id} '
-                                  'on ansible host: {host}, '
-                                  'reason: {err}'.format(
-                                      net_id=network_id,
-                                      host=host_name,
-                                      err=e))
-                        raise exceptions.NetworkingAnsibleMechException(e)
+                lock = self.coordinator.get_lock(host_name)
+                with lock:
+                    if provider_type == 'vlan' and segmentation_id:
+
+                        # re-request network info in case it's stale
+                        net = Network.get_object(context._plugin_context,
+                                                 id=network_id)
+                        LOG.debug('network create object: {}'.format(net))
+
+                        # network was since deleted by user and we can discard
+                        # this request
+                        if not net:
+                            return
+
+                        # check the vlan for this request is still associated
+                        # with this network. We don't currently allow updating
+                        # the segment on a network - it's disallowed at the
+                        # neutron level for provider networks - but that could
+                        # change in the future
+                        s_ids = [s.segmentation_id for s in net.segments]
+                        if segmentation_id not in s_ids:
+                            return
+
+                        # Create VLAN on the switch
+                        try:
+                            self.net_runr.create_vlan(host_name,
+                                                      segmentation_id)
+                            LOG.info('Network {net_id}, segmentation '
+                                     '{seg} has been added on '
+                                     'ansible host {host}'.format(
+                                         net_id=network['id'],
+                                         seg=segmentation_id,
+                                         host=host_name))
+
+                        except Exception as e:
+                            # TODO(radez) I don't think there is a message
+                            #             returned from ansible runner's
+                            #             exceptions
+                            LOG.error('Failed to create network {net_id} '
+                                      'on ansible host: {host}, '
+                                      'reason: {err}'.format(
+                                          net_id=network_id,
+                                          host=host_name,
+                                          err=e))
+                            raise ml2_exc.MechanismDriverError(e)
 
     def delete_network_postcommit(self, context):
         """Delete a network.
@@ -106,32 +159,59 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         deleted.
         """
 
-        network = context.current
-        provider_type = network['provider:network_type']
-        segmentation_id = network['provider:segmentation_id']
-        # physnet = network['provider:physical_network']
+        # assuming all hosts
+        # TODO(radez): can we filter by physnets?
+        LOG.debug('ansnet:network delete')
+        for host_name in self.ml2config.inventory:
+            host = self.ml2config.inventory[host_name]
 
-        if provider_type == 'vlan' and segmentation_id:
-            # assuming all hosts
-            # TODO(radez): can we filter by physnets?
-            for host_name in self.ml2config.inventory:
-                host = self.ml2config.inventory[host_name]
+            network = context.current
+            provider_type = network['provider:network_type']
+            segmentation_id = network['provider:segmentation_id']
+            physnet = network['provider:physical_network']
+
+            if provider_type == 'vlan' and segmentation_id:
                 if host.get('manage_vlans', True):
-                    # Delete VLAN on the switch
-                    try:
-                        self.net_runr.delete_vlan(host_name, segmentation_id)
-                        LOG.info('Network {net_id} has been deleted on '
-                                 'ansible host {host}'.format(
-                                     net_id=network['id'],
-                                     host=host_name))
+                    lock = self.coordinator.get_lock(host_name)
+                    with lock:
+                        # Find out if this segment is active.
+                        # We need to find out if this segment is being used
+                        # by another network before deleting it from the switch
+                        # since reordering could mean that a vlan is recycled
+                        # by the time this request is satisfied. Getting
+                        # the current network is not enough
+                        db = context._plugin_context
 
-                    except Exception as e:
-                        LOG.error('Failed to delete network {net_id} '
-                                  'on ansible host: {host}, '
-                                  'reason: {err}'.format(net_id=network['id'],
-                                                         host=host_name,
-                                                         err=e))
-                        raise exceptions.NetworkingAnsibleMechException(e)
+                        segments = NetworkSegment.get_objects(
+                            db, segmentation_id=segmentation_id)
+
+                        for segment in segments:
+                            if (
+                                segment.segmentation_id == segmentation_id and
+                                segment.physical_network == physnet and
+                                segment.network_type == 'vlan'
+                                ):
+                                LOG.debug('Not deleting segment {} from {}'
+                                          'because it was recreated'.format(
+                                              segmentation_id, physnet))
+                                return
+
+                        # Delete VLAN on the switch
+                        try:
+                            self.net_runr.delete_vlan(host_name,
+                                                      segmentation_id)
+                            LOG.info('Network {net_id} has been deleted on '
+                                     'ansible host {host}'.format(
+                                         net_id=network['id'],
+                                         host=host_name))
+
+                        except Exception as e:
+                            LOG.error('Failed to delete network {net} '
+                                      'on ansible host: {host}, '
+                                      'reason: {err}'.format(net=network['id'],
+                                                             host=host_name,
+                                                             err=e))
+                            raise ml2_exc.MechanismDriverError(e)
 
     def update_port_postcommit(self, context):
         """Update a port.
@@ -159,30 +239,37 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
             switch_name, switch_port, segmentation_id = \
                 self._link_info_from_port(context.original, network)
 
-            LOG.debug('Unplugging port {switch_port} on '
-                      '{switch_name} from vlan: {segmentation_id}'.format(
-                          switch_port=switch_port,
-                          switch_name=switch_name,
-                          segmentation_id=segmentation_id))
-            # The port has been unbound. This will cause the local link
-            # information to be lost, so remove the port from the network on
-            # the switch now while we have the required information.
-            try:
-                self.net_runr.delete_port(switch_name, switch_port)
-                LOG.info('Port {neutron_port} has been unplugged from '
-                         'network {net_id} on device {switch_name}'.format(
-                             neutron_port=port['id'],
-                             net_id=network['id'],
-                             switch_name=switch_name))
-            except Exception as e:
-                LOG.error('Failed to unplug port {neutron_port} on '
-                          'device: {switch_name} from network {net_id} '
-                          'reason: {exc}'.format(
-                              neutron_port=port['id'],
-                              net_id=network['id'],
+            lock = self.coordinator.get_lock(switch_name)
+            with lock:
+                # TODO(michchap)
+                # we need to check that this switch port isn't bound to
+                # another neutron port before unplugging it, and other
+                # update scenarios
+
+                LOG.debug('Unplugging port {switch_port} on '
+                          '{switch_name} from vlan: {segmentation_id}'.format(
+                              switch_port=switch_port,
                               switch_name=switch_name,
-                              exc=e))
-                raise exceptions.NetworkingAnsibleMechException(e)
+                              segmentation_id=segmentation_id))
+                # The port has been unbound. This will cause the local link
+                # information to be lost, so remove the port from the network
+                # on the switch now while we have the required information.
+                try:
+                    self.net_runr.delete_port(switch_name, switch_port)
+                    LOG.info('Port {neutron_port} has been unplugged from '
+                             'network {net_id} on device {switch_name}'.format(
+                                 neutron_port=port['id'],
+                                 net_id=network['id'],
+                                 switch_name=switch_name))
+                except Exception as e:
+                    LOG.error('Failed to unplug port {neutron_port} on '
+                              'device: {switch_name} from network {net_id} '
+                              'reason: {exc}'.format(
+                                  neutron_port=port['id'],
+                                  net_id=network['id'],
+                                  switch_name=switch_name,
+                                  exc=e))
+                    raise ml2_exc.MechanismDriverError(e)
 
     def delete_port_postcommit(self, context):
         """Delete a port.
@@ -198,30 +285,69 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         """
         port = context.current
         network = context.network.current
+
         if self._is_port_bound(context.current):
             switch_name, switch_port, segmentation_id = \
                 self._link_info_from_port(port, network)
-            LOG.debug('Unplugging port {switch_port} on '
-                      '{switch_name} from vlan: {segmentation_id}'.format(
-                          switch_port=switch_port,
-                          switch_name=switch_name,
-                          segmentation_id=segmentation_id))
-            try:
-                self.net_runr.delete_port(switch_name, switch_port)
-                LOG.info('Port {neutron_port} has been unplugged from '
-                         'network {net_id} on device {switch_name}'.format(
-                             neutron_port=port['id'],
-                             net_id=network['id'],
-                             switch_name=switch_name))
-            except Exception as e:
-                LOG.error('Failed to unplug port {neutron_port} on '
-                          'device: {switch_name} from network {net_id} '
-                          'reason: {exc}'.format(
-                              neutron_port=port['id'],
-                              net_id=network['id'],
+
+            lock = self.coordinator.get_lock(switch_name)
+            with lock:
+                db = context._plugin_context
+                mports = Port.get_objects(db, mac_address=port['mac_address'])
+
+                if len(mports) > 1:
+                    LOG.debug('Ansible network bind port found multiple ports'
+                              'matching ironic port mac:'
+                              ' {}'.format(port['mac_address']))
+
+                # Go through all ports with this mac addr and find which
+                # network segment they are on, which will contain physnet
+                # and net type
+                #
+                # if a port with this mac on the same physical provider
+                # is attached to this port then don't delete the interface.
+                # Don't need to check the segment since delete will remove all
+                # segments, and bind also deletes before adding
+                #
+                # These checks are required because a second tenant could
+                # set their mac address to the ironic port one and attempt
+                # meddle with the port delete. This wouldn't do anything
+                # bad today because bind deletes the interface and recreates
+                # it on the physical switch, but that's an implementation
+                # detail we shouldn't rely on.
+                # (In fact, the bind behavior makes delete unneccesary)
+                physnet = network['provider:physical_network']
+                for port in mports:
+                    net = Network.get_object(db, id=port.network_id)
+                    if net:
+                        for seg in net.segments:
+                            if (
+                               seg.physical_network == physnet and
+                               seg.network_type == 'vlan'
+                               ):
+                                return
+
+                LOG.debug('Unplugging port {switch_port} on '
+                          '{switch_name} from vlan: {segmentation_id}'.format(
+                              switch_port=switch_port,
                               switch_name=switch_name,
-                              exc=e))
-                raise exceptions.NetworkingAnsibleMechException(e)
+                              segmentation_id=segmentation_id))
+                try:
+                    self.net_runr.delete_port(switch_name, switch_port)
+                    LOG.info('Port {neutron_port} has been unplugged from '
+                             'network {net_id} on device {switch_name}'.format(
+                                 neutron_port=port['id'],
+                                 net_id=network['id'],
+                                 switch_name=switch_name))
+                except Exception as e:
+                    LOG.error('Failed to unplug port {neutron_port} on '
+                              'device: {switch_name} from network {net_id} '
+                              'reason: {exc}'.format(
+                                  neutron_port=port['id'],
+                                  net_id=network['id'],
+                                  switch_name=switch_name,
+                                  exc=e))
+                    raise ml2_exc.MechanismDriverError(e)
 
     def bind_port(self, context):
         """Attempt to bind a port.
@@ -287,38 +413,78 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
             context._plugin_context, port['id'], resources.PORT,
             ANSIBLE_NETWORKING_ENTITY)
 
-        # Assign port to network
-        try:
-            if trunk_details.TRUNK_DETAILS in port:
-                sub_ports = port[trunk_details.TRUNK_DETAILS]['sub_ports']
-                trunked_vlans = [sp['segmentation_id'] for sp in sub_ports]
-                self.net_runr.conf_trunk_port(switch_name, switch_port,
-                                              segmentation_id, trunked_vlans)
-            else:
-                self.net_runr.conf_access_port(switch_name,
-                                               switch_port,
-                                               segmentation_id)
-            context.set_binding(segments[0][ml2api.ID],
-                                portbindings.VIF_TYPE_OTHER, {})
-            LOG.info('Port {neutron_port} has been plugged into '
-                     'network {net_id} on device {switch_name}'.format(
-                         neutron_port=port['id'],
-                         net_id=network['id'],
-                         switch_name=switch_name))
-        except Exception as e:
-            LOG.error('Failed to plug in port {neutron_port} on '
-                      'device: {switch_name} from network {net_id} '
-                      'reason: {exc}'.format(
-                          neutron_port=port['id'],
-                          net_id=network['id'],
-                          switch_name=switch_name,
-                          exc=e))
-            raise exceptions.NetworkingAnsibleMechException(e)
+        lock = self.coordinator.get_lock(switch_name)
+        with lock:
+            # get both the port and the trunk from the db in case either
+            # have changed
+            db = context._plugin_context
+            updated_port = Port.get_object(db,
+                                           id=port['id'])
+
+            updated_trunk = Trunk.get_object(db,
+                                             port_id=port['id'])
+
+            # port was deleted before this request was satisfied, discard
+            # since the delete will take care of it
+            if not updated_port:
+                LOG.debug('Port {} deleted before binding'.format(
+                    port['id']))
+                return
+
+            # port is there but there's no longer trunk associated with
+            # it that was there when we started
+            if trunk_details.TRUNK_DETAILS in port and not updated_trunk:
+                LOG.debug('Trunk removed from port {}'
+                          'before binding'.format(updated_port.id))
+                return
+
+            # updated link info
+            # TODO(michchap) get updated trunk info?
+            switch_name, switch_port, segmentation_id = \
+                self._link_info_from_port(updated_port, network)
+
+            # Assign port to network
+            try:
+                if trunk_details.TRUNK_DETAILS in port:
+                    LOG.debug('binding trunk {}'.format(updated_trunk))
+
+                    sub_ports = port[trunk_details.TRUNK_DETAILS]['sub_ports']
+                    trunked_vlans = [sp['segmentation_id'] for sp in sub_ports]
+                    self.net_runr.conf_trunk_port(switch_name,
+                                                  switch_port,
+                                                  segmentation_id,
+                                                  trunked_vlans)
+                else:
+                    self.net_runr.conf_access_port(switch_name,
+                                                   switch_port,
+                                                   segmentation_id)
+                context.set_binding(segments[0][ml2api.ID],
+                                    portbindings.VIF_TYPE_OTHER, {})
+                LOG.info('Port {neutron_port} has been plugged into '
+                         'network {net_id} on device {switch_name}'.format(
+                             neutron_port=port['id'],
+                             net_id=network['id'],
+                             switch_name=switch_name))
+            except Exception as e:
+                LOG.error('Failed to plug in port {neutron_port} on '
+                          'device: {switch_name} from network {net_id} '
+                          'reason: {exc}'.format(
+                              neutron_port=port['id'],
+                              net_id=network['id'],
+                              switch_name=switch_name,
+                              exc=e))
+                raise ml2_exc.MechanismDriverError(e)
 
     def _link_info_from_port(self, port, network=None):
         network = network or {}
         # Validate port and local link info
-        local_link_info = port['binding:profile'].get('local_link_information')
+        lli = 'local_link_information'
+        if isinstance(port, Port):
+            local_link_info = port.bindings[0].profile.get(lli)
+            LOG.debug('li portbinding: {}'.format(port.bindings[0]))
+        else:
+            local_link_info = port['binding:profile'].get(lli)
+
         if not local_link_info:
             msg = 'local_link_information is missing in port {port_id} ' \
                   'binding:profile'.format(port_id=port['id'])

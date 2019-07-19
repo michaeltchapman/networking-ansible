@@ -165,6 +165,8 @@ function post_config {
     fi
     populate_ml2_config /$Q_PLUGIN_CONF_FILE ml2 mechanism_drivers=$Q_ML2_PLUGIN_MECHANISM_DRIVERS
 
+    populate_ml2_config /$Q_PLUGIN_CONF_FILE ml2_ansible coordination_uri=etcd://$HOST_IP:2379
+
     ansible_workarounds
 
     create_ovs_manager_user

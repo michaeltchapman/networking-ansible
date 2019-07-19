@@ -30,6 +30,18 @@ managed by networking-ansible.
       administor. This range is the VLAN IDs assigned by Neutron when a network is created.
 
 
+#. Point the ML2 driver at a coordination service
+
+    In the ML2 configuration file, ``/etc/neutron/plugins/ml2/ml2_conf.ini``,
+    add a URI for a coordination service to ``coordination_uri`` under the section
+    ``ml2_ansible``. Most commonly, this will be an etcd or redis uri, but any
+    `Tooz <https://docs.openstack.org/tooz/>`_ backend that supports locks can be used.
+
+    .. code-block:: ini
+
+    [ml2_ansible]
+    coordination_uri = etcd://127.0.0.1:2379
+
 #. Add a section for each switch device that will be managed by networking-ansible.
 
     Create a section for each host with a section name prefixed by ``ansible:``
@@ -91,7 +103,7 @@ managed by networking-ansible.
 
      .. code-block:: console
 
-       service_plugins=router,segments,trunk 
+       service_plugins=router,segments,trunk
 
 #. Restart the Neutron API service
 
