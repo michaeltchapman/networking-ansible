@@ -28,24 +28,24 @@ from the supplied tenant network.
 #. An administrator will provide Ironic node(s) that are available for
    provisioning and a baremetal flavor.
 
-  .. code-block:: console
+    .. code-block:: console
 
-    openstack baremetal node list
-    openstack flavor list
+      openstack baremetal node list
+      openstack flavor list
 
 #. Create a tenant VLAN network and subnet that uses the physical network the guest is attached to.
 
-  .. code-block:: console
+    .. code-block:: console
 
-    openstack network create --provider-network-type vlan --provider-physical-network datacentre my-tenant-net
-    openstack subnet create --network tenant-net --subnet-range 192.168.37.0/24 --allocation-pool start=192.168.37.10,end=192.168.37.20 tenant-subnet
+      openstack network create --provider-network-type vlan --provider-physical-network datacentre my-tenant-net
+      openstack subnet create --network tenant-net --subnet-range 192.168.37.0/24 --allocation-pool start=192.168.37.10,end=192.168.37.20 tenant-subnet
 
 #. Execute server create using the tenant network just created. This assumes
    disk images and keypairs are already created and available.
 
-  .. code-block:: console
+    .. code-block:: console
 
-    openstack server create --image a-baremetal-image --flavor baremetal --nic net-id={my-tenant-net uuid} --key-name my-keypair bm-instance
+      openstack server create --image a-baremetal-image --flavor baremetal --nic net-id={my-tenant-net uuid} --key-name my-keypair bm-instance
 
 
 Guest's Port in Trunk Mode
@@ -58,39 +58,40 @@ from the supplied networks.
 
 
 #. An administrator will provide Ironic node(s) that are available for
-   provisioning and a baremetal flavor.
+   provisioning and a baremetal flavor. The administrator should also
+   ensure the trunk service plugin is enabled.
 
-  .. code-block:: console
+    .. code-block:: console
 
-    openstack baremetal node list
-    openstack flavor list
+      openstack baremetal node list
+      openstack flavor list
 
 #. Create a primary tenant VLAN network, a secondary tenant network, and subnets for each that uses the physical network the guest is attached to.
 
-  .. code-block:: console
+    .. code-block:: console
 
-    openstack network create --provider-network-type vlan --provider-physical-network datacentre primary-tenant-net
-    openstack network create --provider-network-type vlan --provider-physical-network datacentre secondary-tenant-net
-    openstack subnet create --network primary-tenant-net --subnet-range 192.168.3.0/24 --allocation-pool start=192.168.3.10,end=192.168.3.20 primary-tenant-subnet
-    openstack subnet create --network secondary-tenant-net --subnet-range 192.168.7.0/24 --allocation-pool start=192.168.7.10,end=192.168.7.20 secondary-tenant-subnet
+      openstack network create --provider-network-type vlan --provider-physical-network datacentre primary-tenant-net
+      openstack network create --provider-network-type vlan --provider-physical-network datacentre secondary-tenant-net
+      openstack subnet create --network primary-tenant-net --subnet-range 192.168.3.0/24 --allocation-pool start=192.168.3.10,end=192.168.3.20 primary-tenant-subnet
+      openstack subnet create --network secondary-tenant-net --subnet-range 192.168.7.0/24 --allocation-pool start=192.168.7.10,end=192.168.7.20 secondary-tenant-subnet
 
 #. Create a port and create a trunk assigning the port to the trunk as the parent port.
 
-  .. code-block:: console
+    .. code-block:: console
 
-    port create --network primary-tenant-net primary-port
-    network trunk create --parent-port primary-port my-trunk
+      port create --network primary-tenant-net primary-port
+      network trunk create --parent-port primary-port my-trunk
 
 #. Create a port for the secondary network and add it as a subport to the trunk.
 
-  .. code-block:: console
+    .. code-block:: console
 
-    port create --network secondary-tenant-net secondary-port
-    network trunk set --subport port=secondary-port,segmentation-type=vlan,segmentation-id=1234 my-trunk
+      port create --network secondary-tenant-net secondary-port
+      network trunk set --subport port=secondary-port,segmentation-type=vlan,segmentation-id=1234 my-trunk
 
 #. Execute server create using the port ID of the primary port in the trunk. This assumes
    disk images and keypairs are already created and available.
 
-  .. code-block:: console
+    .. code-block:: console
 
-    openstack server create --image a-baremetal-image --flavor baremetal --port {primary-port uuid} --key-name my-keypair bm-instance
+      openstack server create --image a-baremetal-image --flavor baremetal --port {primary-port uuid} --key-name my-keypair bm-instance

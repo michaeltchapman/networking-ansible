@@ -86,6 +86,13 @@ managed by networking-ansible.
       Any inventory parameter that is supported by the version of Ansible should be able to
       be defined in the switch's configuration stanza and will passed to Ansible.
 
+#. If trunk ports are expected to be used, ensure the trunk service plugin is loaded.
+   Its enabled by including "trunk" in the service_plugins list in /etc/neutron/neutron.conf.
+
+     .. code-block:: console
+
+       service_plugins=router,segments,trunk 
+
 #. Restart the Neutron API service
 
      .. code-block:: ini
