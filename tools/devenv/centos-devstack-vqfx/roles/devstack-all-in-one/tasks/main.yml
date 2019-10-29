@@ -96,17 +96,6 @@
   command: usermod --append --groups libvirt vagrant
   become: true
 
-- name: install ovs
-  yum:
-    name: openvswitch
-  become: true
-
-- name: start ovs
-  service:
-    name: openvswitch
-    state: started
-  become: true
-
 - name: stack the stack
   command: ./stack.sh
   args:
