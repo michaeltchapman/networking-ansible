@@ -3,7 +3,6 @@
 
 NET_ANSIBLE_DIR=$DEST/networking-ansible
 NET_ANSIBLE_MECH_DRIVER_ALIAS=ansible
-NET_ANSIBLE_ROLES_DIR=$NET_ANSIBLE_DIR/etc/ansible/roles/
 SITE_PACKAGES_PATHS=$(python -c "from site import getsitepackages; print(' '.join(getsitepackages()))")
 ANSIBLE_ROLES_DIR=/etc/ansible/roles
 
@@ -103,7 +102,6 @@ function pre_install {
 function install_ansible_roles {
     #TODO: Do this via setuptools
     sudo mkdir -p $ANSIBLE_ROLES_DIR
-    sudo cp -r $NET_ANSIBLE_ROLES_DIR/* $ANSIBLE_ROLES_DIR/.
     for P in $SITE_PACKAGES_PATHS; do
         if [ -d $P/$ANSIBLE_ROLES_DIR ]; then
             sudo cp -r $P/$ANSIBLE_ROLES_DIR/* $ANSIBLE_ROLES_DIR/.

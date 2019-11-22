@@ -13,4 +13,3 @@ Networking-Ansible API.
    :maxdepth: 2
 
    ironic
-   api
