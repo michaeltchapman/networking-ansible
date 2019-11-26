@@ -85,6 +85,7 @@ class NetworkingAnsibleTestCase(BaseTestCase):
         self.testsegid = '37'
         self.testsegid2 = '73'
         self.testport = 'switchportid'
+        self.testid = 'aaaa-bbbb-cccc'
 
         # Define mocked network context
         self.mock_net_context = mock.create_autospec(
@@ -112,7 +113,7 @@ class NetworkingAnsibleTestCase(BaseTestCase):
             }]
         }
         self.mock_port_context.current = {
-            'id': 'aaaa-bbbb-cccc',
+            'id': self.testid,
             'binding:profile': self.lli_no_mac,
             'binding:vnic_type': 'baremetal',
             'binding:vif_type': 'other',
@@ -120,7 +121,7 @@ class NetworkingAnsibleTestCase(BaseTestCase):
         self.mock_port_context._plugin_context = mock.MagicMock()
         self.mock_port_context.network = mock.Mock()
         self.mock_port_context.network.current = {
-            'id': 'aaaa-bbbb-cccc',
+            'id': self.testid,
             # TODO(radez) should an int be use here or str ok?
             'provider:segmentation_id': self.testsegid,
         }

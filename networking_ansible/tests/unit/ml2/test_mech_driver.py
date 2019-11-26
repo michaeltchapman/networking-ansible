@@ -24,12 +24,18 @@ from neutron.tests.unit.plugins.ml2 import test_plugin
 from neutron_lib.api.definitions import portbindings
 from neutron_lib.api.definitions import provider_net
 from neutron_lib.api.definitions import trunk_details
+from neutron_lib.callbacks import resources
 import webob.exc
 
 from networking_ansible import exceptions as netans_ml2exc
 from networking_ansible.tests.unit import base
 
 from network_runner import api
+
+ANSIBLE_NETWORKING_ENTITY = 'ANSIBLENETWORKING'
+COORDINATION = 'networking_ansible.ml2.mech_driver.coordination'
+BIND_PROF = 'binding:profile'
+LOCAL_LINK_INFO = 'local_link_information'
 
 
 class TestLibTestConfigFixture(fixtures.Fixture):
@@ -59,15 +65,21 @@ class TestBindPort(base.NetworkingAnsibleTestCase):
                                    mock_prov_blks,
                                    mock_conf_access_port):
         self.mech.bind_port(self.mock_port_context)
-        mock_conf_access_port.assert_called_once()
+        mock_conf_access_port.assert_called_once_with(self.testhost,
+                                                      self.testport,
+                                                      self.testsegid)
 
     def test_bind_port_mac_no_info_local_link_info(self,
                                                    mock_prov_blks,
                                                    mock_conf_access_port):
-        bind_prof = 'binding:profile'
-        self.mock_port_context.current[bind_prof] = self.lli_no_info
+        # populate mac_map use upper because we're doing
+        # it manually and the code forces upper
+        self.m_config.mac_map = {self.testmac.upper(): self.testhost}
+        self.mock_port_context.current[BIND_PROF] = self.lli_no_info
         self.mech.bind_port(self.mock_port_context)
-        mock_conf_access_port.assert_called_once()
+        mock_conf_access_port.assert_called_once_with(self.testhost,
+                                                      self.testport,
+                                                      self.testsegid)
 
     @mock.patch('networking_ansible.ml2.mech_driver.'
                 'AnsibleMechanismDriver._is_port_supported')
@@ -82,9 +94,7 @@ class TestBindPort(base.NetworkingAnsibleTestCase):
     def test_bind_port_no_local_link_info(self,
                                           mock_prov_blks,
                                           mock_conf_access_port):
-        bind_prof = 'binding:profile'
-        local_link_info = 'local_link_information'
-        del self.mock_port_context.current[bind_prof][local_link_info]
+        del self.mock_port_context.current[BIND_PROF][LOCAL_LINK_INFO]
         self.assertRaises(netans_ml2exc.LocalLinkInfoMissingException,
                           self.mech.bind_port,
                           self.mock_port_context)
@@ -137,7 +147,8 @@ class TestIsPortBound(base.NetworkingAnsibleTestCase):
 class TestCreateNetworkPostCommit(base.NetworkingAnsibleTestCase):
     def test_create_network_postcommit(self, mock_create_network):
         self.mech.create_network_postcommit(self.mock_net_context)
-        mock_create_network.assert_called_once()
+        mock_create_network.assert_called_once_with(self.testhost,
+                                                    self.testsegid)
 
     def test_create_network_postcommit_manage_vlans_false(self,
                                                           mock_create_network):
@@ -150,7 +161,8 @@ class TestCreateNetworkPostCommit(base.NetworkingAnsibleTestCase):
         self.assertRaises(ml2_exc.MechanismDriverError,
                           self.mech.create_network_postcommit,
                           self.mock_net_context)
-        mock_create_network.assert_called_once()
+        mock_create_network.assert_called_once_with(self.testhost,
+                                                    self.testsegid)
 
     def test_create_network_postcommit_not_vlan(self, mock_create_network):
         self.mock_net_context.current['provider:network_type'] = 'not-vlan'
@@ -168,7 +180,8 @@ class TestCreateNetworkPostCommit(base.NetworkingAnsibleTestCase):
 class TestDeleteNetworkPostCommit(base.NetworkingAnsibleTestCase):
     def test_delete_network_postcommit(self, mock_delete_network):
         self.mech.delete_network_postcommit(self.mock_net_context)
-        mock_delete_network.assert_called_once()
+        mock_delete_network.assert_called_once_with(self.testhost,
+                                                    self.testsegid)
 
     def test_delete_network_postcommit_manage_vlans_false(self,
                                                           mock_delete_network):
@@ -181,7 +194,8 @@ class TestDeleteNetworkPostCommit(base.NetworkingAnsibleTestCase):
         self.assertRaises(ml2_exc.MechanismDriverError,
                           self.mech.delete_network_postcommit,
                           self.mock_net_context)
-        mock_delete_network.assert_called_once()
+        mock_delete_network.assert_called_once_with(self.testhost,
+                                                    self.testsegid)
 
     def test_delete_network_postcommit_not_vlan(self, mock_delete_network):
         self.mock_net_context.current['provider:network_type'] = 'not-vlan'
@@ -241,7 +255,11 @@ class TestUpdatePortPostCommit(base.NetworkingAnsibleTestCase):
                                             mock_delete_port,
                                             mock_port_bound):
         self.mech.update_port_postcommit(self.mock_port_context)
-        mock_prov_blks.provisioning_complete.assert_called_once()
+        mock_prov_blks.provisioning_complete.assert_called_once_with(
+            self.mock_port_context._plugin_context,
+            self.testid,
+            resources.PORT,
+            ANSIBLE_NETWORKING_ENTITY)
 
     def test_update_port_postcommit_current_no_lli(self,
                                                    mock_prov_blks,
@@ -249,7 +267,11 @@ class TestUpdatePortPostCommit(base.NetworkingAnsibleTestCase):
                                                    mock_port_bound):
         self.mock_port_context.current[portbindings.PROFILE] = self.lli_no_info
         self.mech.update_port_postcommit(self.mock_port_context)
-        mock_prov_blks.provisioning_complete.assert_called_once()
+        mock_prov_blks.provisioning_complete.assert_called_once_with(
+            self.mock_port_context._plugin_context,
+            self.testid,
+            resources.PORT,
+            ANSIBLE_NETWORKING_ENTITY)
 
     def test_update_port_postcommit_original(self,
                                              mock_prov_blks,
@@ -257,7 +279,13 @@ class TestUpdatePortPostCommit(base.NetworkingAnsibleTestCase):
                                              mock_port_bound):
         mock_port_bound.side_effect = [False, True]
         self.mech.update_port_postcommit(self.mock_port_context)
-        mock_delete_port.assert_called_once()
+
+        mock_bind_prof = self.mock_port_context.original[BIND_PROF]
+        mock_lli = mock_bind_prof.get(LOCAL_LINK_INFO)[0]
+        mock_switch_name = mock_lli.get('switch_info')
+        mock_switch_port = mock_lli.get('port_id')
+        mock_delete_port.assert_called_once_with(mock_switch_name,
+                                                 mock_switch_port)
 
     def test_update_port_postcommit_original_fails(self,
                                                    mock_prov_blks,
@@ -268,7 +296,12 @@ class TestUpdatePortPostCommit(base.NetworkingAnsibleTestCase):
         self.assertRaises(ml2_exc.MechanismDriverError,
                           self.mech.update_port_postcommit,
                           self.mock_port_context)
-        mock_delete_port.assert_called_once()
+        mock_bind_prof = self.mock_port_context.original[BIND_PROF]
+        mock_lli = mock_bind_prof.get(LOCAL_LINK_INFO)[0]
+        mock_switch_name = mock_lli.get('switch_info')
+        mock_switch_port = mock_lli.get('port_id')
+        mock_delete_port.assert_called_once_with(mock_switch_name,
+                                                 mock_switch_port)
 
     def test_update_port_postcommit_original_no_lli(self,
                                                     mock_prov_blks,
