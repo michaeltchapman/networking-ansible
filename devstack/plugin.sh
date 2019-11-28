@@ -4,9 +4,7 @@
 NET_ANSIBLE_DIR=$DEST/networking-ansible
 NET_ANSIBLE_MECH_DRIVER_ALIAS=ansible
 NET_ANSIBLE_ROLES_DIR=$NET_ANSIBLE_DIR/etc/ansible/roles/
-
-SITE_PACKAGES=$(python -c "from site import getsitepackages; print(getsitepackages()[0]);")
-
+SITE_PACKAGES_PATHS=$(python -c "from site import getsitepackages; print(' '.join(getsitepackages()))")
 ANSIBLE_ROLES_DIR=/etc/ansible/roles
 
 NET_ANS_SWITCH_INI_FILE="/etc/neutron/plugins/ml2/ml2_conf_netansible.ini"
@@ -106,7 +104,24 @@ function install_ansible_roles {
     #TODO: Do this via setuptools
     sudo mkdir -p $ANSIBLE_ROLES_DIR
     sudo cp -r $NET_ANSIBLE_ROLES_DIR/* $ANSIBLE_ROLES_DIR/.
-    sudo cp -r $SITE_PACKAGES/$ANSIBLE_ROLES_DIR/* $ANSIBLE_ROLES_DIR/.
+    for P in $SITE_PACKAGES_PATHS; do
+        if [ -d $P/$ANSIBLE_ROLES_DIR ]; then
+            sudo cp -r $P/$ANSIBLE_ROLES_DIR/* $ANSIBLE_ROLES_DIR/.
+        fi
+    done
+
+    if [ ! -d $ANSIBLE_ROLES_DIR/network-runner ]; then
+        # virtualenv can give wrong results for site-packages
+        RUNNER_PATH=$(pip --disable-pip-version-check show network-runner | grep Location | cut -f 2 -d ' ')
+        if [ -d $RUNNER_PATH/$ANSIBLE_ROLES_DIR ]; then
+            sudo cp -r $RUNNER_PATH/$ANSIBLE_ROLES_DIR/* $ANSIBLE_ROLES_DIR/.
+        fi
+    fi
+
+    if [ ! -d $ANSIBLE_ROLES_DIR/network-runner ]; then
+        ls $ANSIBLE_ROLES_DIR
+        die $LINENO "Networking-ansible: didn't copy network-runner role"
+    fi
 }
 
 

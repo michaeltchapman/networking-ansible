@@ -1,4 +1,114 @@
 - job:
+    name: ironic-tempest-ipa-wholedisk-direct-tinyipa-networking-ansible
+    description: Single node devstack/tempest based netansible job.
+    parent: devstack-tempest
+    nodeset: openstack-single-node-bionic
+    timeout: 10800
+    required-projects:
+      - openstack/ironic
+      - openstack/ironic-python-agent
+      - openstack/ironic-python-agent-builder
+      - openstack/ironic-tempest-plugin
+      - openstack/virtualbmc
+      - x/pyghmi
+      - x/networking-ansible
+    irrelevant-files:
+      - ^doc/.*$
+      - ^networking_ansible/tests/.*$
+      - ^releasenotes/.*$
+      - ^setup.cfg$
+      - ^tools/.*$
+      - ^tox.ini$
+    vars:
+      tox_envlist: all
+      tempest_test_regex: "(ironic_tempest_plugin.tests.scenario|test_schedule_to_all_nodes)"
+      tempest_concurrency: 1
+      devstack_localrc:
+        DEFAULT_INSTANCE_TYPE: baremetal
+        FORCE_CONFIG_DRIVE: True
+        INSTALL_TEMPEST: False # Don't install a tempest package globaly
+        TEMPEST_PLUGINS: "{{ ansible_user_dir }}/src/opendev.org/openstack/ironic-tempest-plugin"
+        VIRT_DRIVER: ironic
+        BUILD_TIMEOUT: 720
+        IRONIC_BAREMETAL_BASIC_OPS: True
+        IRONIC_BUILD_DEPLOY_RAMDISK: False
+        IRONIC_CALLBACK_TIMEOUT: 600
+        IRONIC_DEPLOY_DRIVER: ipmi
+        IRONIC_INSPECTOR_BUILD_RAMDISK: False
+        IRONIC_RAMDISK_TYPE: tinyipa
+        IRONIC_TEMPEST_BUILD_TIMEOUT: 720
+        IRONIC_VM_COUNT: 1
+        IRONIC_VM_EPHEMERAL_DISK: 0
+        IRONIC_VM_LOG_DIR: '{{ devstack_base_dir }}/ironic-bm-logs'
+        IRONIC_VM_SPECS_RAM: 384
+        IRONIC_VM_SPECS_DISK: 8
+        IRONIC_DEFAULT_DEPLOY_INTERFACE: direct
+
+        IRONIC_TEMPEST_WHOLE_DISK_IMAGE: True
+        IRONIC_DEFAULT_BOOT_OPTION: local
+        ENABLE_TENANT_TUNNELS: False
+        ENABLE_TENANT_VLANS: True
+        OVS_SWITCH_KEY_FILE: /opt/stack/.ssh/id_rsa
+        IRONIC_AUTOMATED_CLEAN_ENABLED: False
+        IRONIC_ENABLED_NETWORK_INTERFACES: flat,neutron
+        IRONIC_NETWORK_INTERFACE: neutron
+        IRONIC_PROVISION_NETWORK_NAME: ironic-provision
+        IRONIC_PROVISION_SUBNET_GATEWAY: 10.0.5.1
+        IRONIC_PROVISION_SUBNET_PREFIX: 10.0.5.0/24
+        IRONIC_USE_LINK_LOCAL: True
+        OS_TEST_TIMEOUT: 2400
+        OVS_BRIDGE_MAPPINGS: 'mynetwork:brbm,public:br-infra'
+        OVS_PHYSICAL_BRIDGE: brbm
+        PHYSICAL_NETWORK: mynetwork
+        PUBLIC_BRIDGE: br-infra
+        Q_AGENT: openvswitch
+        Q_ML2_TENANT_NETWORK_TYPE: vlan
+        Q_PLUGIN: ml2
+        SWIFT_ENABLE_TEMPURLS: True
+        SWIFT_TEMPURL_KEY: secretkey
+        TENANT_VLAN_RANGE: 100:150
+
+      devstack_plugins:
+        ironic: https://opendev.org/openstack/ironic
+        networking-ansible: https://opendev.org/x/networking-ansible
+      zuul_copy_output:
+        '{{ devstack_base_dir }}/ironic-bm-logs': 'logs'
+
+      devstack_services:
+        c-api: False
+        c-bak: False
+        c-sch: False
+        c-vol: False
+        cinder: False
+
+        s-account: True
+        s-container: True
+        s-object: True
+        s-proxy: True
+
+        dstat: True
+        g-api: True
+        g-reg: True
+        key: True
+        mysql: True
+        n-api: True
+        n-api-meta: True
+        n-cauth: True
+        n-cond: True
+        n-cpu: True
+        n-novnc: True
+        n-obj: True
+        n-sch: True
+        placement-api: True
+        q-agt: True
+        q-dhcp: True
+        q-l3: True
+        q-meta: True
+        q-metering: True
+        q-svc: True
+        rabbit: True
+
+- job:
     name: ironic-tempest-ipa-wholedisk-direct-tinyipa-multinode-networking-ansible
     description: ironic-tempest-ipa-wholedisk-direct-tinyipa-multinode-networking-ansible
     parent: tempest-multinode-full
@@ -21,6 +131,7 @@
       - ^tox.ini$
     roles:
       - zuul: opendev.org/zuul/zuul-jobs
+
     vars:
       tox_envlist: all
       tempest_concurrency: 4
@@ -71,11 +182,13 @@
         TEMPEST_PLUGINS: "{{ ansible_user_dir }}/src/opendev.org/openstack/ironic-tempest-plugin"
         TENANT_VLAN_RANGE: 100:150
         VIRT_DRIVER: ironic
+
       devstack_plugins:
         ironic: https://opendev.org/openstack/ironic
         networking-ansible: https://opendev.org/x/networking-ansible
       zuul_copy_output:
         '{{ devstack_base_dir }}/ironic-bm-logs': 'logs'
+
       devstack_services:
         c-api: False
         c-bak: False
@@ -109,6 +222,7 @@
         q-metering: True
         q-svc: True
         rabbit: True
+
     group-vars:
       subnode:
         devstack_localrc:
