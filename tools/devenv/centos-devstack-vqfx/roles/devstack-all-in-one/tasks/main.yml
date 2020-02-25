@@ -4,12 +4,6 @@
     repo: https://opendev.org/openstack-dev/devstack
     dest: "{{ devstack_dir }}"
 
-- name: "WORKAROUND: Install virtualenv 16.2.0, the latest doesn't work"
-  pip:
-    name: virtualenv==16.2.0
-    state: present
-  become: yes
-
 - name: flush iptables
   iptables: flush=true
   become: yes

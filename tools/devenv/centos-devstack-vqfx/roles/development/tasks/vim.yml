@@ -16,6 +16,7 @@
 - name: install packages for peresonal use via pip
   pip:
     name: 'ropevim,flake8'
+    executable: pip3
   become: yes
 
 - name: copy .vimrc to home directory

@@ -1,7 +1,7 @@
 ---
 - name: install pip for personal use via yum
   yum:
-    name: "python,python-pip,python-devel"
+    name: "python3-pip"
     state: present
   become: yes
   when: ansible_distribution == 'CentOS'
@@ -16,5 +16,6 @@
 - name: upgrade pip if available
   pip:
     name: pip
+    executable: pip3
     state: latest
   become: yes

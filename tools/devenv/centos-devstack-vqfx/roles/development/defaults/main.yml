@@ -1,2 +1,2 @@
 ---
-install_python3: false
+install_python3: true
