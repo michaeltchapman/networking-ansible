@@ -24,6 +24,7 @@ from neutron.objects import network
 from neutron.objects import ports
 from neutron.objects import trunk
 from neutron.plugins.ml2.common import exceptions as ml2_exc
+from neutron import quota
 from neutron.tests.unit.plugins.ml2 import test_plugin
 from neutron_lib.api.definitions import portbindings
 from neutron_lib.api.definitions import provider_net
@@ -546,6 +547,10 @@ class TestML2PluginIntegration(NetAnsibleML2Base):
             ),
             'admin_state_up': True
         }
+        make_res = mock.patch.object(quota.QuotaEngine, 'make_reservation')
+        self.mock_quota_make_res = make_res.start()
+        commit_res = mock.patch.object(quota.QuotaEngine, 'commit_reservation')
+        self.mock_quota_commit_res = commit_res.start()
 
     def _write_config_content(self):
         with open(self.filename, 'w') as f:

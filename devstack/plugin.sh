@@ -32,7 +32,7 @@ function ansible_workarounds {
     cd ansible
     git checkout stable-2.6
     python setup.py build
-    sudo python setup.py install
+    sudo python3 setup.py install
     popd
 }
 
@@ -126,7 +126,6 @@ function install_ansible_roles {
 function install {
     # Install networking-ansible code to the machine
     echo_summary "Installing networking-ansible bits and its dependencies"
-    install_package ansible
     setup_develop $NET_ANSIBLE_DIR
     install_ansible_roles
 }
