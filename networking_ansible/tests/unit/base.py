@@ -166,14 +166,19 @@ class NetworkingAnsibleTestCase(BaseTestCase):
         ]
 
         self.mock_port_trunk = mock.Mock(spec=trunk.Trunk)
+        self.mock_subport_1 = mock.Mock(spec=trunk.SubPort)
+        self.mock_subport_1.segmentation_id = self.testsegid2
+        self.mock_port_trunk.sub_ports = [self.mock_subport_1]
 
+        self.mock_port_netid = 'aaaa-bbbb-cccc'
         self.mock_port_obj = mock.create_autospec(
             ports.Port).return_value
-        self.mock_port_obj.network_id = 'aaaa-bbbb-cccc'
+        self.mock_port_obj.network_id = self.mock_port_netid
 
+        self.mock_port2_netid = 'cccc-bbbb-aaaa'
         self.mock_port2_obj = mock.create_autospec(
             ports.Port).return_value
-        self.mock_port2_obj.network_id = 'cccc-bbbb-aaaa'
+        self.mock_port2_obj.network_id = self.mock_port2_netid
 
         self.mock_port_objs = [self.mock_port_obj]
 
