@@ -31,6 +31,7 @@ from oslo_log import log as logging
 
 from networking_ansible import config
 from networking_ansible import exceptions
+from networking_ansible.ml2 import trunk_driver
 
 from network_runner import api as net_runr_api
 from network_runner.resources.inventory import Inventory
@@ -73,6 +74,8 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         self.coordinator.start(start_heart=True)
         LOG.debug("Ansible ML2 coordination started via uri %s",
                   cfg.CONF.ml2_ansible.coordination_uri)
+
+        self.trunk_driver = trunk_driver.NetAnsibleTrunkDriver.create(self)
 
     def create_network_postcommit(self, context):
         """Create a network.
@@ -500,6 +503,95 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
             switch_name = self.ml2config.mac_map[switch_mac]
         segmentation_id = network.get('provider:segmentation_id', '')
         return switch_name, switch_port, segmentation_id
+
+    def ensure_subports(self, port_id, db):
+        # set the correct state on port in the case where it has subports.
+
+        port = Port.get_object(db, id=port_id)
+
+        # If the parent port has been deleted then that delete will handle
+        # removing the trunked vlans on the switch using the mac
+        if not port:
+            LOG.debug('Discarding attempt to ensure subports on a port'
+                      'that has been deleted')
+            return
+
+        # get switch from port bindings
+        switch_name, switch_port, segmentation_id = \
+            self._link_info_from_port(port, None)
+
+        # lock switch
+        lock = self.coordinator.get_lock(switch_name)
+        with lock:
+            # get updated port from db
+            updated_port = Port.get_object(db, id=port_id)
+            if updated_port:
+                self._set_port_state(updated_port, db)
+                return
+            else:
+                # port delete operation will take care of deletion
+                LOG.debug('Discarding attempt to ensure subports on a port {} '
+                          'that was deleted after lock '
+                          'acquisition'.format(port_id))
+                return
+
+    def _set_port_state(self, port, db):
+        if not port:
+            # error
+            raise ml2_exc.MechanismDriverError('Null port passed to '
+                                               'set_port_state')
+
+        # get switch name and port from port bindings
+        switch_name, switch_port, tmp = \
+            self._link_info_from_port(port, None)
+
+        if not switch_name or not switch_port:
+            # error/raise
+            raise ml2_exc.MechanismDriverError('NetAnsible: couldnt find '
+                                               'switch_name {} or switch port '
+                                               '{} to set port '
+                                               'state'.format(switch_name,
+                                                              switch_port))
+
+        network = Network.get_object(db, id=port.network_id)
+        if not network:
+            raise ml2_exc.MechanismDriverError('NetAnsible: couldnt find '
+                                               'network for port '
+                                               '{}'.format(port.id))
+
+        trunk = Trunk.get_object(db, port_id=port.id)
+
+        segmentation_id = network.segments[0].segmentation_id
+        # Assign port to network
+        try:
+            if trunk:
+                sub_ports = trunk.sub_ports
+                trunked_vlans = [sp.segmentation_id for sp in sub_ports]
+                self.net_runr.conf_trunk_port(switch_name,
+                                              switch_port,
+                                              segmentation_id,
+                                              trunked_vlans)
+
+            else:
+                self.net_runr.conf_access_port(switch_name,
+                                               switch_port,
+                                               segmentation_id)
+
+            LOG.info('Port {neutron_port} has been plugged into '
+                     'switch port {sp} on device {switch_name}'.format(
+                         neutron_port=port.id,
+                         sp=switch_port,
+                         switch_name=switch_name))
+            return True
+        except Exception as e:
+            LOG.error('Failed to plug port {neutron_port} into '
+                      'switch port: {sp} on device: {sw} '
+                      'reason: {exc}'.format(
+                          neutron_port=port.id,
+                          sp=switch_port,
+                          sw=switch_name,
+                          exc=e))
+            raise ml2_exc.MechanismDriverError(e)
 
     @staticmethod
     def _is_port_supported(port):

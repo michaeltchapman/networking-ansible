@@ -493,6 +493,130 @@ class TestUpdatePortPostCommit(base.NetworkingAnsibleTestCase):
         mock_delete_port.assert_not_called()
 
 
+@mock.patch.object(ports.Port, 'get_object')
+class TestEnsureSubports(base.NetworkingAnsibleTestCase):
+    @mock.patch.object(coordination.CoordinationDriver, 'get_lock')
+    def test_ensure_subports_deleted(self,
+                                     mock_get_lock,
+                                     mock_port_get_object):
+        mock_port_get_object.return_value = None
+        self.mech.ensure_subports(self.testid, 'testdb')
+        mock_get_lock.assert_not_called()
+
+    @mock.patch('networking_ansible.ml2.mech_driver.'
+                'AnsibleMechanismDriver._set_port_state')
+    def test_ensure_subports_valid(self,
+                                   mock_set_state,
+                                   mock_port_get_object):
+        mock_port_get_object.return_value = self.mock_port_obj
+        self.mech.ensure_subports(self.testid, 'testdb')
+        mock_set_state.assert_called_once_with(self.mock_port_obj,
+                                               'testdb')
+
+    @mock.patch('networking_ansible.ml2.mech_driver.'
+                'AnsibleMechanismDriver._set_port_state')
+    def test_ensure_subports_invalid(self,
+                                     mock_set_state,
+                                     mock_port_get_object):
+        mock_port_get_object.side_effect = [self.mock_port_obj, None]
+        self.mech.ensure_subports(self.testid, 'testdb')
+        mock_set_state.assert_not_called()
+
+
+class TestSetPortState(base.NetworkingAnsibleTestCase):
+    def test_set_port_state_no_port(self):
+        self.assertRaises(ml2_exc.MechanismDriverError,
+                          self.mech._set_port_state,
+                          None,
+                          'db')
+
+    @mock.patch('networking_ansible.ml2.mech_driver.'
+                'AnsibleMechanismDriver._link_info_from_port')
+    def test_set_port_state_no_switch_name(self, mock_link):
+        mock_link.return_value = (None, '123', '')
+        self.assertRaises(ml2_exc.MechanismDriverError,
+                          self.mech._set_port_state,
+                          self.mock_port_obj,
+                          'db')
+
+    @mock.patch('networking_ansible.ml2.mech_driver.'
+                'AnsibleMechanismDriver._link_info_from_port')
+    def test_set_port_state_no_switch_port(self, mock_link):
+        mock_link.return_value = ('123', None, '')
+        self.assertRaises(ml2_exc.MechanismDriverError,
+                          self.mech._set_port_state,
+                          self.mock_port_obj,
+                          'db')
+
+    @mock.patch('networking_ansible.ml2.mech_driver.'
+                'AnsibleMechanismDriver._link_info_from_port')
+    def test_set_port_state_no_switch_port_or_name(self, mock_link):
+        mock_link.return_value = (None, None, '')
+        self.assertRaises(ml2_exc.MechanismDriverError,
+                          self.mech._set_port_state,
+                          self.mock_port_obj,
+                          'db')
+
+    @mock.patch.object(network.Network, 'get_object')
+    def test_set_port_state_no_network(self, mock_network):
+        mock_network.return_value = None
+        self.assertRaises(ml2_exc.MechanismDriverError,
+                          self.mech._set_port_state,
+                          self.mock_port_obj,
+                          'db')
+
+    @mock.patch.object(network.Network, 'get_object')
+    @mock.patch.object(trunk.Trunk, 'get_object')
+    @mock.patch.object(ports.Port, 'get_object')
+    @mock.patch.object(api.NetworkRunner, 'conf_trunk_port')
+    def test_set_port_state_trunk(self,
+                                  mock_conf_trunk_port,
+                                  mock_port,
+                                  mock_trunk,
+                                  mock_network):
+        mock_network.return_value = self.mock_net_obj
+        mock_trunk.return_value = self.mock_port_trunk
+        self.mech._set_port_state(self.mock_port_obj, 'db')
+        mock_conf_trunk_port.assert_called_once_with(self.testhost,
+                                                     self.testport,
+                                                     self.testsegid,
+                                                     [self.testsegid2])
+
+    @mock.patch.object(network.Network, 'get_object')
+    @mock.patch.object(trunk.Trunk, 'get_object')
+    @mock.patch.object(ports.Port, 'get_object')
+    @mock.patch.object(api.NetworkRunner, 'conf_access_port')
+    def test_set_port_state_access(self,
+                                   mock_conf_access_port,
+                                   mock_port,
+                                   mock_trunk,
+                                   mock_network):
+        mock_network.return_value = self.mock_net_obj
+        mock_trunk.return_value = None
+        self.mech._set_port_state(self.mock_port_obj, 'db')
+        mock_conf_access_port.assert_called_once_with(self.testhost,
+                                                      self.testport,
+                                                      self.testsegid)
+
+    @mock.patch.object(network.Network, 'get_object')
+    @mock.patch.object(trunk.Trunk, 'get_object')
+    @mock.patch.object(ports.Port, 'get_object')
+    @mock.patch.object(api.NetworkRunner, 'conf_access_port')
+    def test_set_port_state_access_failure(self,
+                                           mock_conf_access_port,
+                                           mock_port,
+                                           mock_trunk,
+                                           mock_network):
+        mock_network.return_value = self.mock_net_obj
+        mock_trunk.return_value = None
+        self.mech._set_port_state(self.mock_port_obj, 'db')
+        mock_conf_access_port.side_effect = Exception()
+        self.assertRaises(ml2_exc.MechanismDriverError,
+                          self.mech._set_port_state,
+                          self.mock_port_obj,
+                          'db')
+
+
 @mock.patch.object(api.NetworkRunner, 'create_vlan')
 class TestML2PluginIntegration(NetAnsibleML2Base):
     _mechanism_drivers = ['ansible']
