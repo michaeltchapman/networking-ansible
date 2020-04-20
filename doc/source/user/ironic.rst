@@ -79,19 +79,19 @@ from the supplied networks.
 
     .. code-block:: console
 
-      port create --network primary-tenant-net primary-port
-      network trunk create --parent-port primary-port my-trunk
+      openstack port create --network primary-tenant-net primary-port
+      openstack network trunk create --parent-port primary-port my-trunk
 
 #. Create a port for the secondary network and add it as a subport to the trunk.
 
     .. code-block:: console
 
-      port create --network secondary-tenant-net secondary-port
-      network trunk set --subport port=secondary-port,segmentation-type=vlan,segmentation-id=1234 my-trunk
+      openstack port create --network secondary-tenant-net secondary-port
+      openstack network trunk set --subport port=secondary-port,segmentation-type=vlan,segmentation-id=1234 my-trunk
 
 #. Execute server create using the port ID of the primary port in the trunk. This assumes
    disk images and keypairs are already created and available.
 
     .. code-block:: console
 
-      openstack server create --image a-baremetal-image --flavor baremetal --port {primary-port uuid} --key-name my-keypair bm-instance
+      openstack server create --image a-baremetal-image --flavor baremetal --port primary-port --key-name my-keypair bm-instance
