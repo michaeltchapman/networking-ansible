@@ -23,7 +23,6 @@ from neutron.objects.ports import Port
 from neutron.objects.trunk import Trunk
 from neutron.plugins.ml2.common import exceptions as ml2_exc
 from neutron_lib.api.definitions import portbindings
-from neutron_lib.api.definitions import trunk_details
 from neutron_lib.callbacks import resources
 from neutron_lib.plugins.ml2 import api as ml2api
 from oslo_config import cfg
@@ -42,6 +41,7 @@ from tooz import coordination
 LOG = logging.getLogger(__name__)
 
 ANSIBLE_NETWORKING_ENTITY = 'ANSIBLENETWORKING'
+PHYSNET = 'provider:physical_network'
 CONF = config.CONF
 LLI = 'local_link_information'
 
@@ -236,43 +236,15 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
             provisioning_blocks.provisioning_complete(
                 context._plugin_context, port['id'], resources.PORT,
                 ANSIBLE_NETWORKING_ENTITY)
-        elif self._is_port_bound(context.original):
+
             port = context.original
             network = context.network.current
             switch_name, switch_port, segmentation_id = \
                 self._link_info_from_port(context.original, network)
 
-            lock = self.coordinator.get_lock(switch_name)
-            with lock:
-                # TODO(michchap)
-                # we need to check that this switch port isn't bound to
-                # another neutron port before unplugging it, and other
-                # update scenarios
-
-                LOG.debug('Unplugging port {switch_port} on '
-                          '{switch_name} from vlan: {segmentation_id}'.format(
-                              switch_port=switch_port,
-                              switch_name=switch_name,
-                              segmentation_id=segmentation_id))
-                # The port has been unbound. This will cause the local link
-                # information to be lost, so remove the port from the network
-                # on the switch now while we have the required information.
-                try:
-                    self.net_runr.delete_port(switch_name, switch_port)
-                    LOG.info('Port {neutron_port} has been unplugged from '
-                             'network {net_id} on device {switch_name}'.format(
-                                 neutron_port=port['id'],
-                                 net_id=network['id'],
-                                 switch_name=switch_name))
-                except Exception as e:
-                    LOG.error('Failed to unplug port {neutron_port} on '
-                              'device: {switch_name} from network {net_id} '
-                              'reason: {exc}'.format(
-                                  neutron_port=port['id'],
-                                  net_id=network['id'],
-                                  switch_name=switch_name,
-                                  exc=e))
-                    raise ml2_exc.MechanismDriverError(e)
+            self.ensure_port(port['id'], context._plugin_context,
+                             port['mac_address'], switch_name, switch_port,
+                             network[PHYSNET], context)
 
     def delete_port_postcommit(self, context):
         """Delete a port.
@@ -290,67 +262,13 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         network = context.network.current
 
         if self._is_port_bound(context.current):
+
             switch_name, switch_port, segmentation_id = \
                 self._link_info_from_port(port, network)
 
-            lock = self.coordinator.get_lock(switch_name)
-            with lock:
-                db = context._plugin_context
-                mports = Port.get_objects(db, mac_address=port['mac_address'])
-
-                if len(mports) > 1:
-                    LOG.debug('Ansible network bind port found multiple ports'
-                              'matching ironic port mac:'
-                              ' {}'.format(port['mac_address']))
-
-                # Go through all ports with this mac addr and find which
-                # network segment they are on, which will contain physnet
-                # and net type
-                #
-                # if a port with this mac on the same physical provider
-                # is attached to this port then don't delete the interface.
-                # Don't need to check the segment since delete will remove all
-                # segments, and bind also deletes before adding
-                #
-                # These checks are required because a second tenant could
-                # set their mac address to the ironic port one and attempt
-                # meddle with the port delete. This wouldn't do anything
-                # bad today because bind deletes the interface and recreates
-                # it on the physical switch, but that's an implementation
-                # detail we shouldn't rely on.
-                # (In fact, the bind behavior makes delete unneccesary)
-                physnet = network['provider:physical_network']
-                for port in mports:
-                    net = Network.get_object(db, id=port.network_id)
-                    if net:
-                        for seg in net.segments:
-                            if (
-                               seg.physical_network == physnet and
-                               seg.network_type == 'vlan'
-                               ):
-                                return
-
-                LOG.debug('Unplugging port {switch_port} on '
-                          '{switch_name} from vlan: {segmentation_id}'.format(
-                              switch_port=switch_port,
-                              switch_name=switch_name,
-                              segmentation_id=segmentation_id))
-                try:
-                    self.net_runr.delete_port(switch_name, switch_port)
-                    LOG.info('Port {neutron_port} has been unplugged from '
-                             'network {net_id} on device {switch_name}'.format(
-                                 neutron_port=port['id'],
-                                 net_id=network['id'],
-                                 switch_name=switch_name))
-                except Exception as e:
-                    LOG.error('Failed to unplug port {neutron_port} on '
-                              'device: {switch_name} from network {net_id} '
-                              'reason: {exc}'.format(
-                                  neutron_port=port['id'],
-                                  net_id=network['id'],
-                                  switch_name=switch_name,
-                                  exc=e))
-                    raise ml2_exc.MechanismDriverError(e)
+            self.ensure_port(port['id'], context._plugin_context,
+                             port['mac_address'], switch_name, switch_port,
+                             network[PHYSNET], context)
 
     def bind_port(self, context):
         """Attempt to bind a port.
@@ -393,18 +311,18 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         by the QoS service to identify the available QoS rules you
         can use with ports.
         """
+
         port = context.current
         network = context.network.current
         switch_name, switch_port, segmentation_id = \
             self._link_info_from_port(port, network)
+
         if not self._is_port_supported(port):
             LOG.debug('Port {} has vnic_type set to %s which is not correct '
                       'to work with networking-ansible driver.'.format(
                           port['id'],
                           port[portbindings.VNIC_TYPE]))
             return
-
-        segments = context.segments_to_bind
 
         LOG.debug('Plugging in port {switch_port} on '
                   '{switch_name} to vlan: {segmentation_id}'.format(
@@ -416,67 +334,9 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
             context._plugin_context, port['id'], resources.PORT,
             ANSIBLE_NETWORKING_ENTITY)
 
-        lock = self.coordinator.get_lock(switch_name)
-        with lock:
-            # get both the port and the trunk from the db in case either
-            # have changed
-            db = context._plugin_context
-            updated_port = Port.get_object(db,
-                                           id=port['id'])
-
-            updated_trunk = Trunk.get_object(db,
-                                             port_id=port['id'])
-
-            # port was deleted before this request was satisfied, discard
-            # since the delete will take care of it
-            if not updated_port:
-                LOG.debug('Port {} deleted before binding'.format(
-                    port['id']))
-                return
-
-            # port is there but there's no longer trunk associated with
-            # it that was there when we started
-            if trunk_details.TRUNK_DETAILS in port and not updated_trunk:
-                LOG.debug('Trunk removed from port {}'
-                          'before binding'.format(updated_port.id))
-                return
-
-            # updated link info
-            # TODO(michchap) get updated trunk info?
-            switch_name, switch_port, segmentation_id = \
-                self._link_info_from_port(updated_port, network)
-
-            # Assign port to network
-            try:
-                if trunk_details.TRUNK_DETAILS in port:
-                    LOG.debug('binding trunk {}'.format(updated_trunk))
-
-                    sub_ports = port[trunk_details.TRUNK_DETAILS]['sub_ports']
-                    trunked_vlans = [sp['segmentation_id'] for sp in sub_ports]
-                    self.net_runr.conf_trunk_port(switch_name,
-                                                  switch_port,
-                                                  segmentation_id,
-                                                  trunked_vlans)
-                else:
-                    self.net_runr.conf_access_port(switch_name,
-                                                   switch_port,
-                                                   segmentation_id)
-                context.set_binding(segments[0][ml2api.ID],
-                                    portbindings.VIF_TYPE_OTHER, {})
-                LOG.info('Port {neutron_port} has been plugged into '
-                         'network {net_id} on device {switch_name}'.format(
-                             neutron_port=port['id'],
-                             net_id=network['id'],
-                             switch_name=switch_name))
-            except Exception as e:
-                LOG.error('Failed to plug in port {neutron_port} on '
-                          'device: {switch_name} from network {net_id} '
-                          'reason: {exc}'.format(
-                              neutron_port=port['id'],
-                              net_id=network['id'],
-                              switch_name=switch_name,
-                              exc=e))
-                raise ml2_exc.MechanismDriverError(e)
+        self.ensure_port(port['id'], context._plugin_context,
+                         port['mac_address'], switch_name, switch_port,
+                         network[PHYSNET], context)
 
     def _link_info_from_port(self, port, network=None):
         network = network or {}
@@ -535,6 +395,57 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                           'acquisition'.format(port_id))
                 return
 
+    def ensure_port(self, port_id, db, mac, switch_name,
+                    switch_port, physnet, port_context):
+        LOG.debug('Ensuring state of port {port_id} '
+                  'with mac addr {mac} '
+                  'on switch {switch_name} '
+                  'on port {switch_port} '
+                  'on physnet {physnet} '
+                  'using db context {db}'.format(port_id=port_id,
+                                                 mac=mac,
+                                                 switch_name=switch_name,
+                                                 switch_port=switch_port,
+                                                 physnet=physnet,
+                                                 db=db))
+
+        if not self.net_runr.has_host(switch_name):
+            raise ml2_exc.MechanismDriverError('NetAnsible: couldnt find '
+                                               'switch_name {} in network '
+                                               'runner inventory while '
+                                               'configuring port id '
+                                               '{}'.format(switch_name,
+                                                           port_id))
+
+        # get dlock for the switch we're working with
+        lock = self.coordinator.get_lock(switch_name)
+        with lock:
+
+            # port = get the port from the db
+            updated_port = Port.get_object(db, id=port_id)
+
+            # if it exists
+            if updated_port:
+                if self._set_port_state(updated_port, db):
+                    if port_context and port_context.segments_to_bind:
+                        segments = port_context.segments_to_bind
+                        port_context.set_binding(segments[0][ml2api.ID],
+                                                 portbindings.VIF_TYPE_OTHER,
+                                                 {})
+                return
+
+            else:
+                # if the port doesn't exist, we have a mac+switch, we can look
+                # up whether the port needs to be deleted on the switch
+                if self._is_deleted_port_in_use(physnet, mac, db):
+                    LOG.debug('Port {port_id} was deleted, but its switch port'
+                              ' {sp} is now in use by another port, discarding'
+                              ' request to delete'.format(port_id=port_id,
+                                                          sp=switch_port))
+                    return
+                else:
+                    self._delete_switch_port(switch_name, switch_port)
+
     def _set_port_state(self, port, db):
         if not port:
             # error
@@ -552,6 +463,11 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                                                '{} to set port '
                                                'state'.format(switch_name,
                                                               switch_port))
+
+        if not self.net_runr.has_host(switch_name):
+            raise ml2_exc.MechanismDriverError('NetAnsible: couldnt find '
+                                               'switch_name {} in '
+                                               'inventory'.format(switch_name))
 
         network = Network.get_object(db, id=port.network_id)
         if not network:
@@ -592,6 +508,63 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                           sw=switch_name,
                           exc=e))
             raise ml2_exc.MechanismDriverError(e)
+
+    def _delete_switch_port(self, switch_name, switch_port):
+        # we want to delete the physical port on the switch
+        # provided since it's no longer in use
+        LOG.debug('Unplugging port {switch_port} '
+                  'on {switch_name}'.format(switch_port=switch_port,
+                                            switch_name=switch_name))
+        try:
+            self.net_runr.delete_port(switch_name, switch_port)
+            LOG.info('Unplugged port {switch_port} '
+                     'on {switch_name}'.format(switch_port=switch_port,
+                                               switch_name=switch_name))
+        except Exception as e:
+            LOG.error('Failed to uplug port {switch_port} '
+                      'on {switch_name} '
+                      'reason: {exc}'.format(
+                          switch_port=switch_port,
+                          switch_name=switch_name,
+                          exc=e))
+            raise ml2_exc.MechanismDriverError(e)
+
+    def _is_deleted_port_in_use(self, physnet, mac, db):
+        # Go through all ports with this mac addr and find which
+        # network segment they are on, which will contain physnet
+        # and net type
+        #
+        # if a port with this mac on the same physical provider
+        # is attached to this port then don't delete the interface.
+        # Don't need to check the segment since delete will remove all
+        # segments, and bind also deletes before adding
+        #
+        # These checks are required because a second tenant could
+        # set their mac address to the ironic port one and attempt
+        # meddle with the port delete. This wouldn't do anything
+        # bad today because bind deletes the interface and recreates
+        # it on the physical switch, but that's an implementation
+        # detail we shouldn't rely on.
+
+        # get port by mac
+        mports = Port.get_objects(db, mac_address=mac)
+
+        if len(mports) > 1:
+            # This isn't technically a problem, but it may indicate something
+            # fishy is going on
+            LOG.warn('multiple ports matching ironic '
+                     'port mac: {mac}'.format(mac=mac))
+
+        for port in mports:
+            net = Network.get_object(db, id=port.network_id)
+            if net:
+                for seg in net.segments:
+                    if (
+                       seg.physical_network == physnet and
+                       seg.network_type == 'vlan'
+                       ):
+                        return True
+        return False
 
     @staticmethod
     def _is_port_supported(port):

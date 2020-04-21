@@ -102,7 +102,7 @@ class NetworkingAnsibleTestCase(BaseTestCase):
         self.mock_net_context = mock.create_autospec(
             driver_context.NetworkContext).return_value
         self.mock_net_context.current = {
-            'id': 37,
+            'id': self.testsegid,
             'provider:network_type': 'vlan',
             'provider:segmentation_id': self.testsegid,
             'provider:physical_network': self.testphysnet,
