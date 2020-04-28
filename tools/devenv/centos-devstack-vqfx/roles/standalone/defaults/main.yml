@@ -1,0 +1,9 @@
+---
+standalone_homedir: /home/vagrant
+standalone_gateway: 192.168.122.1
+standalone_interface: eth0
+
+appliance_os: junos
+appliance_mac: "52:54:00:ea:92:ca"
+appliance_user: root
+appliance_pass: Juniper

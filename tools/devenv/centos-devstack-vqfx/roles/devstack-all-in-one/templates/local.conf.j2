@@ -7,7 +7,7 @@ PASSWORD={{ service_password }}
 # (michchap) removeme when gate is unbroken
 enable_plugin networking-ansible https://github.com/michaeltchapman/networking-ansible
 
-enable_plugin ironic https://opendev.org/openstack/ironic
+enable_plugin ironic https://github.com/michaeltchapman/ironic
 
 disable_all_services
 enable_service g-reg
@@ -47,8 +47,6 @@ disable_service horizon
 disable_service cinder
 enable_service n-sch
 enable_service dstat
-
-FORCE=yes
 
 #PASSWORDS
 MYSQL_PASSWORD=$PASSWORD

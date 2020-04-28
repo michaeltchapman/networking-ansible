@@ -1,0 +1,47 @@
+---
+- name: rename machine
+  shell: "hostnamectl set-hostname standalone.localdomain; hostnamectl set-hostname standalone.localdomain --transient"
+  become: true
+
+- set_fact:
+    controller_host_ip: "{{ hostvars.controller.ansible_default_ipv4.address }}"
+
+# arp-scan isn't in epel or base repos any more, not sure if this is a bug
+- name: install nmap
+  yum:
+    name: nmap
+  become: true
+
+# arp command replaced with ip neighbour
+- name: find the appliance ip
+  shell: "nmap -sn 192.168.122.0/24 > /dev/null; ip neighbour | grep 52:54:00:ea:92:ca | awk '{print $1}'"
+  register: _appliance_ip
+  become: true
+
+- set_fact:
+    appliance_ip: "{{ _appliance_ip.stdout }}"
+
+- name: install tripleo repo
+  shell: "yum install -y https://trunk.rdoproject.org/centos8/component/tripleo/current/python3-tripleo-repos-0.0.1-0.20200416011346.98f7e15.el8.noarch.rpm"
+  become: true
+
+- name: enable tripleo master
+  shell: "tripleo-repos current-tripleo-dev ceph"
+  become: true
+
+# arp-scan isn't in epel or base repos any more, not sure if this is a bug
+- name: install tripleo client 
+  yum:
+    name: python3-tripleoclient 
+  become: true
+
+- name: Generate a file with the default ContainerImagePrepare value
+  shell: "openstack tripleo container image prepare default --output-env-file {{ standalone_homedir }}/containers-prepare-parameters.yaml"
+  become: true
+
+- name: Set standalone parameters
+  template:                                                                     
+    src: standalone_parameters.yaml.j2
+    dest: "{{ standalone_homedir }}/standalone_parameters.yaml"
+    mode: 0644
+

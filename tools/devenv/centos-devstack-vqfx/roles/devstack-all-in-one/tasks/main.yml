@@ -1,34 +1,21 @@
 ---
 - name: clone devstack repo
   git:
-    repo: https://opendev.org/openstack-dev/devstack
+    repo: https://github.com/michaeltchapman/devstack
     dest: "{{ devstack_dir }}"
-
-- name: "WORKAROUND: Install virtualenv 16.2.0, the latest doesn't work"
-  pip:
-    name: virtualenv==16.2.0
-    state: present
-  become: yes
-
-- name: flush iptables
-  iptables: flush=true
-  become: yes
-
-- name: install bridge-utils
-  yum:
-    name: bridge-utils
-  become: true
 
 - set_fact:
     controller_host_ip: "{{ hostvars.controller.ansible_default_ipv4.address }}"
 
-- name: install arp-scan
+# arp-scan isn't in epel or base repos any more, not sure if this is a bug
+- name: install nmap
   yum:
-    name: arp-scan
+    name: nmap
   become: true
 
+# arp command replaced with ip neighbour
 - name: find the appliance ip
-  shell: "arp-scan 192.168.121.0/24 | grep 52:54:00:ea:92:ca | awk '{print $1}'"
+  shell: "nmap -sn 192.168.122.0/24 > /dev/null; ip neighbour | grep 52:54:00:ea:92:ca | awk '{print $1}'"
   register: _appliance_ip
   become: true
 
