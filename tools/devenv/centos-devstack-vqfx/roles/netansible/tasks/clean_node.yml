@@ -1,5 +1,9 @@
 - name: manage baremetal node
   shell: "{{ openrc_admin }} && openstack baremetal node manage {{ nodename }} --wait"
+  args:
+    executable: "/bin/bash"
 
 - name: provide baremetal node
   shell: "{{ openrc_admin }} && openstack baremetal node provide {{ nodename }}"
+  args:
+    executable: "/bin/bash"

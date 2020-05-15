@@ -1,0 +1,62 @@
+---
+- name: ensure local image directory exists
+  file:
+    path: "{{ base_image_dir }}/{{ image_group }}/{{ image_name }}"
+    state: directory
+
+- name: get local image version
+  shell: "ls {{ base_image_dir }}/{{ image_group }}/{{ image_name }} | head -n 1"
+  register: image_version_check
+  when: image_version is not defined
+  ignore_errors: true
+
+# will always succeed if no version given and the image exists due to above
+- name: check if we already have requested version
+  stat:
+    path: "{{ base_image_dir }}/{{ image_group }}/{{ image_name }}/{{ image_version_check.stdout }}"
+  register: local_image_exists
+
+- set_fact:
+    image_version: "{{ image_version_check.stdout }}"
+  when: local_image_exists.stat.isreg is defined and local_image_exists.stat.isreg
+
+- block:
+    - name: get image metadata
+      command: "curl https://app.vagrantup.com/{{ image_group }}/boxes/{{ image_name }}"
+      register: image_metadata_uri
+
+    - set_fact:
+        current_image_url: "{{ image_metadata_uri.stdout | from_json | json_query(query_str) }}"
+      vars:
+        query_str: "versions[0].providers[?name=='libvirt'].url | [0]"
+
+    - set_fact:
+        image_version: "{{ image_metadata_uri.stdout | from_json | json_query(query_str) }}"
+      vars:
+        query_str: "versions[0].version"
+
+    - name: Download box
+      get_url:
+        url: "{{ current_image_url }}"
+        dest: "/tmp/temp_vagrant_box"
+
+    - name: Extract image from box
+      command:
+        cmd: "tar -xvf temp_vagrant_box"
+        chdir: /tmp
+
+    - name: Copy image to base images folder
+      copy:
+        src: /tmp/box.img
+        dest: "{{ base_image_dir }}/{{ image_group }}/{{ image_name }}/{{ image_version }}"
+
+  when: local_image_exists.stat.isreg is not defined or local_image_exists.stat.isreg == False
+
+#- set_fact:
+#    current_image_checksum: "{{ image_metadata_uri.stdout | from_json | json_query(query_str) }}"
+#  vars:
+#    query_str: "versions[0].providers[?name=='libvirt'].checksum"
+#- set_fact:
+#    current_image_checksum_type: "{{ image_metadata_uri.stdout | from_json | json_query(query_str) }}"
+#  vars:
+#    query_str: "versions[0].providers[?name=='libvirt'].checksum_type"

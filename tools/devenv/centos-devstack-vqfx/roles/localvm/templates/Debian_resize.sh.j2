@@ -1,0 +1,9 @@
+#!/bin/bash
+
+if ! command -v growpart ; then
+  sudo apt-get install -y cloud-guest-utils
+fi
+
+sudo growpart /dev/sda 1
+
+sudo xfs_growfs /

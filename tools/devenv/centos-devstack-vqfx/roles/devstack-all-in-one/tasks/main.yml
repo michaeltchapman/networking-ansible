@@ -1,4 +1,8 @@
 ---
+- hostname:
+    name: devstack
+  become: true
+
 - name: clone devstack repo
   git:
     repo: https://opendev.org/openstack-dev/devstack
@@ -6,28 +10,43 @@
 
 - name: flush iptables
   iptables: flush=true
-  become: yes
+  become: true
 
 - name: install bridge-utils
-  yum:
+  package:
     name: bridge-utils
+    state: latest
   become: true
 
 - set_fact:
-    controller_host_ip: "{{ hostvars.controller.ansible_default_ipv4.address }}"
+    controller_host_ip: "{{ ansible_default_ipv4.address }}"
 
-- name: install arp-scan
-  yum:
-    name: arp-scan
-  become: true
+- name: Get appliance IP if not provided
+  block:
+    - name: install arp-scan
+      package:
+        name: arp-scan
+        state: latest
+      become: true
 
-- name: find the appliance ip
-  shell: "arp-scan 192.168.121.0/24 | grep 52:54:00:ea:92:ca | awk '{print $1}'"
-  register: _appliance_ip
-  become: true
+    - name: find the appliance ip
+      shell: "arp-scan 192.168.121.0/24 | grep 52:54:00:ea:92:ca | awk '{print $1}'"
+      register: _appliance_ip
+      become: true
 
-- set_fact:
-    appliance_ip: "{{ _appliance_ip.stdout }}"
+    - name: set the appliance ip
+      set_fact:
+        appliance_ip: "{{ _appliance_ip.stdout }}"
+
+    - name: check we found the appliance
+      fail:
+        msg: Appliance IP not found
+      when: appliance_ip|length > 0
+  when: appliance_ip is not defined
+
+- name: Show appliance IP
+  debug:
+    var: appliance_ip
 
 - name: create local.conf for controller
   template:
@@ -37,26 +56,36 @@
     mode: 0644
 
 - name: install iptables
-  yum:
+  package:
     name: iptables-services
   become: true
+  when: ansible_distribution == 'CentOS'
 
 - name: install libvirt
-  yum:
+  package:
     name: libvirt
   become: true
+  when: ansible_distribution == 'CentOS'
+
+- name: install libvirt
+  package:
+    name: libvirt-daemon-system
+  become: true
+  when: ansible_distribution == 'Ubuntu'
 
 - name: stop firewalld
   service:
     name: firewalld
     state: stopped
   become: true
+  when: ansible_distribution == 'CentOS'
 
-- name: start iptables
+- name: stop iptables
   service:
     name: iptables
     state: stopped
   become: true
+  when: ansible_distribution == 'CentOS'
 
 - name: start libvirtd
   service:
@@ -79,6 +108,7 @@
 - name: save the flushed rules
   command: service iptables save
   become: true
+  when: ansible_distribution == 'CentOS'
 
 - name: restart libvirtd
   service:

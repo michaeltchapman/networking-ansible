@@ -1,0 +1,134 @@
+- name: set working directory
+  file:
+    path: "{{ working_dir }}"
+    state: directory
+
+- name: set base image directory
+  file:
+    path: "{{ base_image_dir }}"
+    state: directory
+
+- name: Get Image
+  include: get_image.yml
+  when: image_group is defined
+
+- name: set vm disk directory
+  file:
+    path: "{{ vm_disk_dir }}"
+    state: directory
+
+- name: Set local image path
+  set_fact:
+    base_image: "{{ image_name }}"
+  when: image_group is not defined
+
+- name: Set vagrant cloud image path
+  set_fact:
+    base_image: "{{ image_group }}/{{ image_name }}/{{ image_version }}"
+  when: image_group is defined
+
+- name: check base image exists
+  stat:
+    path: "{{ base_image_dir }}/{{ base_image }}"
+  register:  base_image_stat
+
+- name: fail if the base image has been removed
+  fail:
+    msg: "Base image not found at {{ base_image_dir }}/{{ base_image }}"
+  when: not base_image_stat.stat.exists
+
+- name: Set current disk path
+  set_fact:
+    disk_path: "{{ vm_disk_dir }}/{{ vm_info.name }}"
+
+- name: Remove current disk image if it's still there
+  file:
+    path: "{{ disk_path }}"
+    state: absent
+
+- name: Debug vm info
+  debug:
+    var: vm_info
+
+- name: Copy base image to disk image location
+  copy:
+    src: "{{ base_image_dir }}/{{ base_image }}"
+    dest: "{{ disk_path }}"
+
+- name: Resize base image
+  command: "qemu-img resize {{ disk_path }} 40G"
+
+- name: Create resize script
+  template:
+    src: "resize.sh.j2"
+    dest: /tmp/resize.sh
+  when: vm_info.resize is defined
+
+  #--run-command "dnf install -y cloud-utils-growpart; growpart /dev/vda 1; xfs_growfs /"
+- name: Resize base image filesystem
+  command: "virt-customize -v -a {{ disk_path }} --run /tmp/resize.sh"
+  when: vm_info.resize is defined
+
+# Modify the vm definition to include the base image volume
+- name: Create vm definition
+  set_fact:
+    current_vm: "{{ vm_info|combine({'volumes': [ { 'name': vm_info.name, 'type': 'file', 'file_path': vm_disk_dir, 'capacity': '40GB', 'disk_bus': vm_info.disk_bus | default('sata') }]}, recursive=True) }}"
+
+- name: Debug vm definition
+  debug:
+    var: current_vm
+
+- name: Create VM
+  include_role:
+    name: libvirt-vm
+  vars:
+    libvirt_vms: "{{ [ current_vm ] }}"
+    libvirt_vm_uri: "qemu:///session"
+
+- name: Get VM mac address
+  shell: "virsh dumpxml {{ vm_info.name }} | grep 'mac address' | head -n 1 | cut -d \"'\" -f 2"
+  register: vm_mac
+
+- block:
+  - name: Get VM XML if we didn't get a mac
+    command: virsh dumpxml testvm
+    register: virsh_dumpxml
+  - name: Show VM XML if we didn't get a mac
+    debug:
+      var: virsh_dumpxml.stdout
+  - name: Fail
+    fail:
+      msh: Failed to find VM mac address
+  when: vm_mac.stdout == ""
+
+- name: Wait for VM IP
+  command: "arp -n"
+  register: vm_ip_avail
+  retries: "{{ vm_info.ssh_wait | default(10) }}"
+  delay: 1
+  until: vm_ip_avail.stdout | regex_search(vm_mac.stdout)
+
+- name: Get VM IP address
+  shell: "arp -n | grep {{ vm_mac.stdout }} | cut -d ' ' -f 1"
+  register: vm_ip
+
+- name: Set VM IP address fact
+  set_fact: {"{{ vm_info.name }}_ip":"{{ vm_ip.stdout }}"}
+
+- name: Add new vm to inventory
+  add_host:
+    name: "{{ vm_ip.stdout }}"
+    groups: "{{ vm_groups }}"
+    ansible_user: "{{ vm_info.ansible_user | default('vagrant') }}"
+    ansible_password: "{{ vm_info.ansible_password }}"
+    ansible_ssh_extra_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  when: vm_info.ansible_password is defined
+
+- name: Add new vm to inventory
+  add_host:
+    name: "{{ vm_ip.stdout }}"
+    groups: "{{ vm_groups }}"
+    ansible_user: "{{ vm_info.ansible_user | default('vagrant') }}"
+    ansible_private_key_file: "{{ vagrant_private_key_path }}"
+    ansible_ssh_extra_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  when: vm_info.ansible_password is not defined

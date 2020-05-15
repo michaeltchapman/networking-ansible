@@ -1,0 +1,134 @@
+controller_vm_definition:
+  state: present
+  name: 'local_controller'
+  memory_mb: 8192
+  vcpus: 2
+  resize: 40G
+  ssh_wait: 30
+  interfaces:
+    - type: bridge
+      source:
+        dev: virbr0
+    - type: udp
+      source_port: 9003
+      local_port: 8003
+    - type: udp
+      source_port: 9005
+      local_port: 8005
+    - type: udp
+      source_port: 9006
+      local_port: 8006
+    - type: udp
+      source_port: 9007
+      local_port: 8007
+    - type: udp
+      source_port: 9008
+      local_port: 8008
+    - type: udp
+      source_port: 9009
+      local_port: 8009
+
+appliance_cpu: >
+  <cpu mode='custom' match='exact' check='full'>
+    <model fallback='forbid'>Skylake-Client-IBRS</model>
+    <vendor>Intel</vendor>
+    <feature policy='require' name='ss'/>
+    <feature policy='require' name='vmx'/>
+    <feature policy='require' name='hypervisor'/>
+    <feature policy='require' name='tsc_adjust'/>
+    <feature policy='require' name='clflushopt'/>
+    <feature policy='require' name='umip'/>
+    <feature policy='require' name='md-clear'/>
+    <feature policy='require' name='stibp'/>
+    <feature policy='require' name='arch-capabilities'/>
+    <feature policy='require' name='ssbd'/>
+    <feature policy='require' name='xsaves'/>
+    <feature policy='require' name='pdpe1gb'/>
+    <feature policy='require' name='ibpb'/>
+    <feature policy='require' name='amd-ssbd'/>
+    <feature policy='require' name='skip-l1dfl-vmentry'/>
+    <feature policy='disable' name='mpx'/>
+  </cpu>
+
+vqfx_vm_definition:
+  state: present
+  name: 'local_vqfx'
+  memory_mb: 2048
+  vcpus: 2
+  ssh_wait: 60
+  ansible_user: root
+  ansible_password: Juniper
+  os_bios_use_serial: false
+  os_boot_menu_enable: true
+  disk_bus: ide
+  cpu_mode_block: "{{ appliance_cpu }}"
+  interfaces:
+    - type: bridge
+      source:
+        dev: virbr0
+      mac: "52:54:00:ea:92:ca"
+    # vqfx-pfe links
+    - type: udp
+      source_port: 8001
+      local_port: 9001
+    - type: udp
+      source_port: 8002
+      local_port: 9002
+    # controller link
+    - type: udp
+      source_port: 8003
+      local_port: 9003
+    # virtual baremetal links
+    - type: udp
+      source_port: 8005
+      local_port: 9005
+    - type: udp
+      source_port: 8006
+      local_port: 9006
+    - type: udp
+      source_port: 8007
+      local_port: 9007
+    - type: udp
+      source_port: 8008
+      local_port: 9008
+    - type: udp
+      source_port: 8009
+      local_port: 9009
+
+  nic_model_type: e1000
+
+vqfx_pfe_vm_definition:
+  state: present
+  name: 'local_vqfx_pfe'
+  memory_mb: 2048
+  vcpus: 2
+  ssh_wait: 60
+  ansible_user: root
+  ansible_password: no
+  os_bios_use_serial: false
+  os_boot_menu_enable: true
+  cpu_mode_block: "{{ appliance_cpu }}"
+  os_boot:
+    - hd
+  disk_bus: ide
+  interfaces:
+    - type: bridge
+      source:
+        dev: virbr0
+    - type: udp
+      source_port: 9001
+      local_port: 8001
+    - type: udp
+      source_port: 9002
+      local_port: 8002
+  nic_model_type: e1000
+
+controller_image_name: ubuntu1804
+controller_image_group: generic
+vqfx_pfe_image_name: vqfx10k-pfe
+vqfx_image_name: vqfx10k-re
+node_count: 2
+
+provision_controller: True
+provision_vqfx: True
+provision_vqfx_pfe: True

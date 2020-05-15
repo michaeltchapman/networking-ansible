@@ -13,3 +13,21 @@ appliance_os: junos
 appliance_mac: "52:54:00:ea:92:ca"
 appliance_user: root
 appliance_pass: Juniper
+
+node_count: 2
+
+devstack_vm:
+  state: present
+  name: 'devstack'
+  memory_mb: 8192
+  vcpus: 4
+  volumes:
+    - name: 'root'
+      device: 'disk'
+      type: 'file'
+      file_path: "{{ image_dir }}/netansible_devstack.img"
+      format: 'qcow2'
+      capacity: '40GB'
+
+  interfaces:
+    - network: default

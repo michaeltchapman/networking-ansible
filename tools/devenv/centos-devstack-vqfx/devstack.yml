@@ -1,0 +1,78 @@
+---
+- name: provision vqfx
+  hosts: localhost
+  tasks:
+    - name: Make vm
+      include_role:
+        name: localvm
+      vars:
+        vm_info: "{{ vqfx_vm_definition }}"
+        image_name: "{{ vqfx_image_name }}"
+        vm_groups:
+          - vqfx
+      when: provision_vqfx is defined and provision_vqfx
+
+- name: configure vqfx
+  hosts: vqfx
+  gather_facts: no
+  tasks:
+    - name: vqfx
+      include_role:
+        name: "{{ item }}"
+      with_items:
+        - vqfx
+      when: provision_vqfx is defined and provision_vqfx
+
+- name: provision vqfx_pfe
+  hosts: localhost
+  tasks:
+    - name: Make vm
+      include_role:
+        name: localvm
+      vars:
+        vm_info: "{{ vqfx_pfe_vm_definition }}"
+        image_name: "{{ vqfx_pfe_image_name }}"
+        vm_groups:
+          - vqfx_pfe
+      when: provision_vqfx_pfe is defined and provision_vqfx_pfe
+
+- name: provision controller
+  hosts: localhost
+  tasks:
+    - name: Make vm
+      include_role:
+        name: localvm
+      vars:
+        vm_info: "{{ controller_vm_definition }}"
+        image_group: "{{ controller_image_group }}"
+        image_name: "{{ controller_image_name }}"
+        vm_groups:
+          - controller
+      when: provision_controller is defined and provision_controller
+
+- name: configure controller
+  hosts: controller
+  tasks:
+    - name: common
+      include_role:
+        name: common
+      when: provision_controller is defined and provision_controller
+
+    - name: development
+      include_role:
+        name: development
+      when: provision_controller is defined and provision_controller
+
+    - name: devstack
+      include_role:
+        name: devstack-all-in-one
+      vars:
+        appliance_ip: "{{ hostvars['localhost']['local_vqfx_ip'] }}"
+      when: provision_controller is defined and provision_controller
+
+    - name: netansible
+      include_role:
+        name: netansible
+      vars:
+        appliance_ip: "{{ hostvars['localhost']['local_vqfx_ip'] }}"
+      when: provision_controller is defined and provision_controller
