@@ -34,7 +34,7 @@ from networking_ansible import exceptions
 from networking_ansible.ml2 import trunk_driver
 
 from network_runner import api as net_runr_api
-from network_runner.resources.inventory import Inventory
+from network_runner.models.inventory import Inventory
 
 from tooz import coordination
 
