@@ -18,5 +18,6 @@
       - openstack-python3-ussuri-jobs
       - periodic-jobs-with-neutron-lib-master
       - docs-on-readthedocs
+      - openstack-lower-constraints-jobs
     vars:
       rtd_webhook_id: '45496'
