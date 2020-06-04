@@ -14,4 +14,4 @@ Pull requests submitted through GitHub will be ignored.
 
 Bugs should be filed on Storyboard, not GitHub:
 
-   https://storyboard.openstack.org/#!/project/openstack/networking-ansible
+   https://storyboard.openstack.org/#!/project/x/networking-ansible
