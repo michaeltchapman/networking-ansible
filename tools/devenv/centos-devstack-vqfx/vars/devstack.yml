@@ -2,7 +2,7 @@ controller_vm_definition:
   state: present
   name: 'local_controller'
   memory_mb: 8192
-  vcpus: 2
+  vcpus: 4
   resize: 40G
   ssh_wait: 30
   interfaces:
