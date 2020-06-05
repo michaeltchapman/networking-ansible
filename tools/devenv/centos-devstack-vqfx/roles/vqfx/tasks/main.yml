@@ -2,7 +2,7 @@
 - name: configure ansible_network_os for vqfx
   set_fact:
     ansible_network_os: junos
+    ansible_connection: network_cli
 
-- include_tasks: configure_ssh.yml
-
+#- include_tasks: configure_ssh.yml
 - include_tasks: configure_ports.yml

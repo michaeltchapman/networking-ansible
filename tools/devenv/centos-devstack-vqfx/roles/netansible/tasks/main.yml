@@ -35,6 +35,15 @@
   with_sequence: count={{node_count}} start=0
   become: true
 
+- name: set links up on all ethernet ports
+  command: "ip link set {{ item }} up"
+  with_items:
+    - eth0
+    - eth1
+    - eth2
+    - eth3
+  become: true
+
 - name: set MTU on all ethernet ports
   command: "ip link set {{ item }} mtu 1400"
   with_items:
@@ -58,29 +67,41 @@
 
 - name: find provisioning network
   shell: "{{ openrc_admin }} && openstack network list | grep provisioning"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: provisioning_network
 
 - name: create provisioning network
   shell: "{{ openrc_admin }}  && openstack network create --external --share --provider-network-type flat --provider-physical-network provisioning provisioning"
+  args:
+    executable: "/bin/bash"
   when: provisioning_network.rc != 0
 
 - name: find provisioning subnet
   shell: "{{ openrc_admin }}  && openstack subnet list | grep provisioning"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: provisioning_subnet
 
 - name: create provisioning subnet
   shell: "{{ openrc_admin }}  && openstack subnet create --network provisioning --subnet-range 192.168.2.0/24 --gateway 192.168.2.1 --allocation-pool start=192.168.2.100,end=192.168.2.200 provisioning-subnet"
+  args:
+    executable: "/bin/bash"
   when: provisioning_subnet.rc != 0
 
 - name: find default router
   shell:  "{{ openrc_admin }} && openstack router list | grep default-router"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: default_router
 
 - name: create router
   shell: "{{ openrc_admin }} && openstack router create default-router"
+  args:
+    executable: "/bin/bash"
   when: default_router.rc != 0
 
 # (michchap) I don't think this is needed because Ironic adds a gateway to the
@@ -91,97 +112,142 @@
 
 - name: find tenant network
   shell:  "{{ openrc_admin }} && openstack network list | grep tenant-net"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: tenant_net
 
 - name: create tenant network
   shell: "{{ openrc_admin }} && openstack network create --provider-network-type vlan --provider-physical-network provisioning tenant-net"
+  args:
+    executable: "/bin/bash"
   when: tenant_net.rc != 0
 
 - name: find tenant subnet
   shell:  "{{ openrc_admin }} && openstack subnet list | grep tenant-subnet"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: tenant_subnet
 
 - name: create tenant subnet
   shell: "{{ openrc_admin }} && openstack subnet create --network tenant-net --subnet-range 192.168.3.0/24     --allocation-pool start=192.168.3.10,end=192.168.3.20 tenant-subnet"
+  args:
+    executable: "/bin/bash"
   when: tenant_subnet.rc != 0
 
 - name: add tenant subnet to router
   shell: "{{ openrc_admin }} && openstack router add subnet default-router tenant-subnet"
+  args:
+    executable: "/bin/bash"
   when: tenant_subnet.rc != 0
 
 ## Provisioning flavor configuration
 - name: find baremetal flavor
   shell: "{{ openrc_admin }}  && openstack flavor list | grep baremetal"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: baremetal_flavor
 
 - name: create flavor
   shell: "{{ openrc_admin }}  && openstack flavor create --ram 1024 --disk 20 --vcpus 1 baremetal"
+  args:
+    executable: "/bin/bash"
   when: baremetal_flavor.rc != 0
+
 - name: set flavor profile
   shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property \"capabilities:profile\"=\"baremetal\" --property capabilities:boot_option=\"local\""
+  args:
+    executable: "/bin/bash"
   when: baremetal_flavor.rc != 0
 
 - name: set flavor CUSTOM_BAREMETAL
   shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property resources:CUSTOM_BAREMETAL=1"
+  args:
+    executable: "/bin/bash"
   when: baremetal_flavor.rc != 0
 
 - name: set flavor vcpu
   shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property resources:VCPU=0"
+  args:
+    executable: "/bin/bash"
   when: baremetal_flavor.rc != 0
 
 - name: set flavor memory
   shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property resources:MEMORY_MB=0"
+  args:
+    executable: "/bin/bash"
   when: baremetal_flavor.rc != 0
 
 - name: set flavor disk gb
   shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property resources:DISK_GB=0"
+  args:
+    executable: "/bin/bash"
   when: baremetal_flavor.rc != 0
 
 - name: find baremetal host aggregate
   shell: "{{ openrc_admin }}  && openstack aggregate list | grep baremetal-hosts"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: baremetal_aggregate
 
 - name: create baremetal host aggregate
   shell: "{{ openrc_admin }}  && openstack aggregate create --property baremetal=true baremetal-hosts"
+  args:
+    executable: "/bin/bash"
   when: baremetal_aggregate.rc != 0
 
 - name: find virtual host aggregate
   shell: "{{ openrc_admin }}  && openstack aggregate list | grep virtual-hosts"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: virtual_aggregate
 
 - name: create virtual host aggregate
   shell: "{{ openrc_admin }}  && openstack aggregate create --property baremetal=false virtual-hosts"
+  args:
+    executable: "/bin/bash"
   when: virtual_aggregate.rc != 0
 
 - name: find controller in baremetal aggregate
   shell: "{{ openrc_admin }}  && openstack aggregate show baremetal-hosts | grep overcloud-controller"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: controller_aggregate
 
 - name: add controller to baremetal aggregate
   shell: "{{ openrc_admin }}  && openstack aggregate add host baremetal-hosts devstack"
+  args:
+    executable: "/bin/bash"
   when: controller_aggregate.rc != 0
 
 - name: set baremetal property in flavor
   shell: "{{ openrc_admin }}  && openstack flavor set baremetal --property baremetal=true"
+  args:
+    executable: "/bin/bash"
   when: baremetal_flavor.rc != 0
 
 - name: find virtual flavor
   shell: "{{ openrc_admin }}  && openstack flavor list | grep virtual"
+  args:
+    executable: "/bin/bash"
   ignore_errors: true
   register: virtual_flavor
 
 - name: create virtual flavor
   shell: "{{ openrc_admin }}  && openstack flavor create --ram 1024 --disk 20 --vcpus 1 virtual"
+  args:
+    executable: "/bin/bash"
   when: virtual_flavor.rc != 0
 
 - name: set virtual flavor to baremetal false
   shell: "{{ openrc_admin }}  && openstack flavor set virtual --property baremetal=\"false\""
+  args:
+    executable: "/bin/bash"
   when: virtual_flavor.rc != 0
 
 - name: configure baremetal
@@ -215,3 +281,5 @@
 
 #- name: boot server
 #  shell: "{{ openrc_admin }} && openstack server create --image cirros-0.4.0-x86_64-disk --flavor baremetal --nic net-id=$(openstack network show tenant-net -f value -c id) instance1"
+#  args:
+#    executable: "/bin/bash"

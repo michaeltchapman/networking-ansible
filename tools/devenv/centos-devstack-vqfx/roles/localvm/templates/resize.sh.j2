@@ -1,0 +1,29 @@
+#!/bin/bash
+
+set -eux
+
+uname -a
+
+if ! command -v growpart ; then
+  if command -v yum ; then
+    sudo yum install -y cloud-utils-growpart
+  elif command -v dnf ; then
+    sudo dnf install -y cloud-utils-growpart
+  elif command -v apt-get ; then
+    sudo apt-get install -y cloud-guest-utils
+  fi
+fi
+
+# virt-customize seems to use sda, even though the vm we boot later
+# uses /vda
+sudo growpart /dev/sda  || true
+
+FS_TYPE=`findmnt -o FSTYPE -fn /`
+if [ "$FS_TYPE" = "xfs" ]; then
+    xfs_growfs /
+elif [ "$FS_TYPE" = "ext4" ]; then
+    resize2fs {{ vm_resize_partition }} || true
+else
+    echo "ERROR: Unknown filesystem, cannot resize."
+    exit 1
+fi
