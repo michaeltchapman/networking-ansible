@@ -29,6 +29,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from networking_ansible import config
+from networking_ansible import constants as c
 from networking_ansible import exceptions
 from networking_ansible.ml2 import trunk_driver
 
@@ -39,11 +40,7 @@ from tooz import coordination
 
 
 LOG = logging.getLogger(__name__)
-
-ANSIBLE_NETWORKING_ENTITY = 'ANSIBLENETWORKING'
-PHYSNET = 'provider:physical_network'
 CONF = config.CONF
-LLI = 'local_link_information'
 
 
 class AnsibleMechanismDriver(ml2api.MechanismDriver):
@@ -63,6 +60,16 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
         _inv = Inventory()
         _inv.deserialize({'all': {'hosts': self.ml2config.inventory}})
         self.net_runr = net_runr_api.NetworkRunner(_inv)
+
+        # build the extra_params dict.
+        # this holds extra config params per host passed to network runner
+        self.extra_params = {}
+        for host_name in self.ml2config.inventory:
+            self.extra_params[host_name] = {}
+            for i in c.EXTRA_PARAMS:
+                if i in self.ml2config.inventory[host_name]:
+                    self.extra_params[host_name][i] = \
+                        self.ml2config.inventory[host_name].get(i)
 
         self.coordinator = coordination.get_coordinator(
             cfg.CONF.ml2_ansible.coordination_uri,
@@ -128,8 +135,10 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
 
                         # Create VLAN on the switch
                         try:
-                            self.net_runr.create_vlan(host_name,
-                                                      segmentation_id)
+                            self.net_runr.create_vlan(
+                                host_name,
+                                segmentation_id,
+                                **self.extra_params[host_name])
                             LOG.info('Network {net_id}, segmentation '
                                      '{seg} has been added on '
                                      'ansible host {host}'.format(
@@ -201,8 +210,10 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
 
                         # Delete VLAN on the switch
                         try:
-                            self.net_runr.delete_vlan(host_name,
-                                                      segmentation_id)
+                            self.net_runr.delete_vlan(
+                                host_name,
+                                segmentation_id,
+                                **self.extra_params[host_name])
                             LOG.info('Network {net_id} has been deleted on '
                                      'ansible host {host}'.format(
                                          net_id=network['id'],
@@ -235,7 +246,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
             port = context.current
             provisioning_blocks.provisioning_complete(
                 context._plugin_context, port['id'], resources.PORT,
-                ANSIBLE_NETWORKING_ENTITY)
+                c.NETWORKING_ENTITY)
 
             port = context.original
             network = context.network.current
@@ -244,7 +255,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
 
             self.ensure_port(port['id'], context._plugin_context,
                              port['mac_address'], switch_name, switch_port,
-                             network[PHYSNET], context)
+                             network[c.PHYSNET], context)
 
     def delete_port_postcommit(self, context):
         """Delete a port.
@@ -268,7 +279,7 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
 
             self.ensure_port(port['id'], context._plugin_context,
                              port['mac_address'], switch_name, switch_port,
-                             network[PHYSNET], context)
+                             network[c.PHYSNET], context)
 
     def bind_port(self, context):
         """Attempt to bind a port.
@@ -332,11 +343,11 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
 
         provisioning_blocks.add_provisioning_component(
             context._plugin_context, port['id'], resources.PORT,
-            ANSIBLE_NETWORKING_ENTITY)
+            c.NETWORKING_ENTITY)
 
         self.ensure_port(port['id'], context._plugin_context,
                          port['mac_address'], switch_name, switch_port,
-                         network[PHYSNET], context)
+                         network[c.PHYSNET], context)
 
     def _link_info_from_port(self, port, network=None):
         network = network or {}
@@ -486,12 +497,15 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                 self.net_runr.conf_trunk_port(switch_name,
                                               switch_port,
                                               segmentation_id,
-                                              trunked_vlans)
+                                              trunked_vlans,
+                                              **self.extra_params[switch_name])
 
             else:
-                self.net_runr.conf_access_port(switch_name,
-                                               switch_port,
-                                               segmentation_id)
+                self.net_runr.conf_access_port(
+                    switch_name,
+                    switch_port,
+                    segmentation_id,
+                    **self.extra_params[switch_name])
 
             LOG.info('Port {neutron_port} has been plugged into '
                      'switch port {sp} on device {switch_name}'.format(
@@ -516,7 +530,9 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                   'on {switch_name}'.format(switch_port=switch_port,
                                             switch_name=switch_name))
         try:
-            self.net_runr.delete_port(switch_name, switch_port)
+            self.net_runr.delete_port(switch_name,
+                                      switch_port,
+                                      **self.extra_params[switch_name])
             LOG.info('Unplugged port {switch_port} '
                      'on {switch_name}'.format(switch_port=switch_port,
                                                switch_name=switch_name))

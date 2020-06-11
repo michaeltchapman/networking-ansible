@@ -17,6 +17,7 @@ from oslo_config import cfg
 from oslo_config import types
 from oslo_log import log as logging
 
+from networking_ansible import constants as c
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
@@ -30,9 +31,6 @@ cfg.CONF.register_opts(anet_opts, group='ml2_ansible')
 
 
 class Config(object):
-
-    driver_tag = 'ansible:'
-    booleans = ['manage_vlans']
 
     def __init__(self):
         """Get inventory list from config files
@@ -56,14 +54,14 @@ class Config(object):
 
             # filter out sections that begin with the driver's tag
             hosts = {k: v for k, v in sections.items()
-                     if k.startswith(self.driver_tag)}
+                     if k.startswith(c.DRIVER_TAG)}
 
             # munge the oslo_config data removing the device tag and
             # turning lists with single item strings into strings
             for host in hosts:
-                dev_id = host.partition(self.driver_tag)[2]
+                dev_id = host.partition(c.DRIVER_TAG)[2]
                 dev_cfg = {k: v[0] for k, v in hosts[host].items()}
-                for b in self.booleans:
+                for b in c.BOOLEANS:
                     if b in dev_cfg:
                         dev_cfg[b] = types.Boolean()(dev_cfg[b])
                 self.inventory[dev_id] = dev_cfg
