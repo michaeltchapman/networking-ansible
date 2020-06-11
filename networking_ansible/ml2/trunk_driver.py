@@ -18,6 +18,7 @@ from neutron_lib.api.definitions import portbindings
 from neutron_lib.callbacks import events
 from neutron_lib.callbacks import registry
 from neutron_lib.callbacks import resources
+from neutron_lib.db import api as db_api
 from neutron_lib.services.trunk import constants as trunk_consts
 from oslo_config import cfg
 from oslo_log import log
@@ -50,7 +51,7 @@ class NetAnsibleTrunkHandler(object):
                   payload.subports, payload.current_trunk)
 
         context = n_context.get_admin_context()
-        with context.session.begin():
+        with db_api.CONTEXT_READER.using(context):
             self.plugin_driver.ensure_subports(payload.current_trunk.port_id,
                                                context)
 
@@ -59,7 +60,7 @@ class NetAnsibleTrunkHandler(object):
                   payload.subports, payload.original_trunk)
 
         context = n_context.get_admin_context()
-        with context.session.begin():
+        with db_api.CONTEXT_READER.using(context):
             self.plugin_driver.ensure_subports(payload.original_trunk.port_id,
                                                context)
 
