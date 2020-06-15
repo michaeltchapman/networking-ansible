@@ -19,6 +19,7 @@
       - ^setup.cfg$
       - ^tools/.*$
       - ^tox.ini$
+      - ^.*\.rst$
     vars:
       tox_envlist: all
       tempest_test_regex: "(ironic_tempest_plugin.tests.scenario|test_schedule_to_all_nodes)"
@@ -131,6 +132,7 @@
       - ^setup.cfg$
       - ^tools/.*$
       - ^tox.ini$
+      - ^.*\.rst$
     roles:
       - zuul: opendev.org/zuul/zuul-jobs
 
