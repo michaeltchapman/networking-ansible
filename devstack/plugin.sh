@@ -20,22 +20,6 @@ OVS_SWITCH_KEY_FILE=${OVS_SWITCH_KEY_FILE:-"$OVS_SWITCH_DATA_DIR/keys/ovs-switch
 OVS_SWITCH_TEST_BRIDGE="ovsswitch"
 OVS_SWITCH_TEST_PORT="sw-port-01"
 
-
-function ansible_workarounds {
-    sudo pip uninstall ansible -y || :
-
-    # This is a workaround for issue https://github.com/ansible/ansible/issues/42108
-    # fix is currenlty merged in devel branch, requested as a backport to 2.6
-    # until we have a build with the fix, we compile upstream devel branch
-    pushd /opt/stack
-    [ -d ansible ] || git clone https://github.com/ansible/ansible.git
-    cd ansible
-    git checkout stable-2.6
-    python setup.py build
-    sudo python3 setup.py install
-    popd
-}
-
 function create_ovs_manager_user {
     # Give the non-root user the ability to run as **root** via ``sudo``
     is_package_installed sudo || install_package sudo
@@ -126,6 +110,7 @@ function install_ansible_roles {
 function install {
     # Install networking-ansible code to the machine
     echo_summary "Installing networking-ansible bits and its dependencies"
+    pip_install "ansible"
     setup_develop $NET_ANSIBLE_DIR
     install_ansible_roles
 }
@@ -163,8 +148,6 @@ function post_config {
     populate_ml2_config /$Q_PLUGIN_CONF_FILE ml2 mechanism_drivers=$Q_ML2_PLUGIN_MECHANISM_DRIVERS
 
     populate_ml2_config /$Q_PLUGIN_CONF_FILE ml2_ansible coordination_uri=etcd://$HOST_IP:2379
-
-    ansible_workarounds
 
     create_ovs_manager_user
     configure_switch_ssh_keypair
