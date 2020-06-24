@@ -32,15 +32,9 @@ from neutron_lib.api.definitions import provider_net
 from neutron_lib.callbacks import resources
 import webob.exc
 
+from networking_ansible import constants as c
 from networking_ansible.tests.unit import base
 from tooz import coordination
-
-COORDINATION = 'networking_ansible.ml2.mech_driver.coordination'
-
-ANSIBLE_NETWORKING_ENTITY = 'ANSIBLENETWORKING'
-COORDINATION = 'networking_ansible.ml2.mech_driver.coordination'
-BIND_PROF = 'binding:profile'
-LOCAL_LINK_INFO = 'local_link_information'
 
 
 class TestLibTestConfigFixture(fixtures.Fixture):
@@ -59,7 +53,7 @@ class TestLibTestConfigFixture(fixtures.Fixture):
 class NetAnsibleML2Base(test_plugin.Ml2PluginV2TestCase):
     def setUp(self):
         base.patch_neutron_quotas()
-        with mock.patch(COORDINATION) as m_coord:
+        with mock.patch(c.COORDINATION) as m_coord:
             m_coord.get_coordinator = lambda *args: mock.create_autospec(
                 coordination.CoordinationDriver).return_value
             super(NetAnsibleML2Base, self).setUp()
@@ -274,12 +268,23 @@ class TestDeletePortPostCommit(base.NetworkingAnsibleTestCase):
 @mock.patch('networking_ansible.config.Config')
 class TestInit(base.NetworkingAnsibleTestCase):
     def test_intialize(self, m_config):
-        with mock.patch(COORDINATION) as m_coord:
+        with mock.patch(c.COORDINATION) as m_coord:
             m_coord.get_coordinator = lambda *args: mock.create_autospec(
                 coordination.CoordinationDriver).return_value
             m_config.return_value = base.MockConfig()
             self.mech.initialize()
             m_config.assert_called_once_with()
+
+    def test_intialize_w_extra_params(self, m_config):
+        with mock.patch(c.COORDINATION) as m_coord:
+            m_coord.get_coordinator = lambda *args: mock.create_autospec(
+                coordination.CoordinationDriver).return_value
+            m_config.return_value = base.MockConfig(self.testhost,
+                                                    self.testmac)
+            m_config.return_value.add_extra_params()
+            self.mech.initialize()
+            assert self.mech.extra_params == {self.testhost:
+                                              {'stp_edge': True}}
 
 
 @mock.patch('networking_ansible.ml2.mech_driver.'
@@ -300,7 +305,7 @@ class TestUpdatePortPostCommit(base.NetworkingAnsibleTestCase):
             self.mock_port_context._plugin_context,
             self.testid,
             resources.PORT,
-            ANSIBLE_NETWORKING_ENTITY)
+            c.NETWORKING_ENTITY)
         mock_ensure_port.assert_called_once_with(
             self.testid,
             self.mock_port_context._plugin_context,
@@ -376,8 +381,8 @@ class TestDeleteSwitchPort(base.NetworkingAnsibleTestCase):
                           2)
 
     def test_delete_switch_port(self, mock_delete):
-        self.mech._delete_switch_port(1, 2)
-        mock_delete.assert_called_once_with(1, 2)
+        self.mech._delete_switch_port(self.testhost, self.testport)
+        mock_delete.assert_called_once_with(self.testhost, self.testport)
 
 
 @mock.patch.object(ports.Port, 'get_objects')

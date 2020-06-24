@@ -49,6 +49,10 @@ class MockConfig(object):
         self.inventory = {host: {'mac': mac}} if host and mac else {}
         self.mac_map = {}
 
+    def add_extra_params(self):
+        for i in self.inventory:
+            self.inventory[i]['stp_edge'] = True
+
 
 class BaseTestCase(base.BaseTestCase):
     test_config_files = []
@@ -152,6 +156,14 @@ class NetworkingAnsibleTestCase(BaseTestCase):
             'binding:vif_type': 'other',
             'mac_address': self.testmac
         }
+        self.mock_port_context.original = {
+            'id': self.testid,
+            'binding:profile': self.lli_no_mac,
+            'binding:vnic_type': 'baremetal',
+            'binding:vif_type': 'other',
+            'mac_address': self.testmac
+        }
+
         self.mock_port_context._plugin_context = mock.MagicMock()
         self.mock_port_context.network = mock.Mock()
         self.mock_port_context.network.current = {
