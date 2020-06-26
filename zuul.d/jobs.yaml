@@ -122,7 +122,6 @@
       - openstack/ironic-python-agent
       - openstack/ironic-tempest-plugin
       - openstack/ironic-python-agent-builder
-      - x/pyghmi
       - openstack/virtualbmc
       - x/networking-ansible
     irrelevant-files:
