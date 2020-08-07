@@ -248,10 +248,18 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                 context._plugin_context, port['id'], resources.PORT,
                 c.NETWORKING_ENTITY)
 
+        elif self._is_port_bound(context.original):
             port = context.original
             network = context.network.current
             switch_name, switch_port, segmentation_id = \
                 self._link_info_from_port(context.original, network)
+
+            LOG.debug('Ensuring Updated port {switch_port} on network {network}'
+                      '{switch_name} to vlan: {segmentation_id}'.format(
+                          switch_port=switch_port,
+                          network=network,
+                          switch_name=switch_name,
+                          segmentation_id=segmentation_id))
 
             self.ensure_port(port['id'], context._plugin_context,
                              port['mac_address'], switch_name, switch_port,
@@ -276,6 +284,12 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
 
             switch_name, switch_port, segmentation_id = \
                 self._link_info_from_port(port, network)
+
+            LOG.debug('Ensuring Deleted port {switch_port} on '
+                      '{switch_name} to vlan: {segmentation_id}'.format(
+                          switch_port=switch_port,
+                          switch_name=switch_name,
+                          segmentation_id=segmentation_id))
 
             self.ensure_port(port['id'], context._plugin_context,
                              port['mac_address'], switch_name, switch_port,
@@ -351,13 +365,8 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
 
     def _link_info_from_port(self, port, network=None):
         network = network or {}
-        # Validate port and local link info
-        lli = 'local_link_information'
-        if isinstance(port, Port):
-            local_link_info = port.bindings[0].profile.get(lli)
-            LOG.debug('li portbinding: {}'.format(port.bindings[0]))
-        else:
-            local_link_info = port['binding:profile'].get(lli)
+
+        local_link_info = self._get_port_lli(port)
 
         if not local_link_info:
             msg = 'local_link_information is missing in port {port_id} ' \
@@ -435,8 +444,8 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
             # port = get the port from the db
             updated_port = Port.get_object(db, id=port_id)
 
-            # if it exists
-            if updated_port:
+            # if it exists and is bound to a port
+            if self._get_port_lli(updated_port):
                 if self._set_port_state(updated_port, db):
                     if port_context and port_context.segments_to_bind:
                         segments = port_context.segments_to_bind
@@ -572,14 +581,17 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
                      'port mac: {mac}'.format(mac=mac))
 
         for port in mports:
-            net = Network.get_object(db, id=port.network_id)
-            if net:
-                for seg in net.segments:
-                    if (
-                       seg.physical_network == physnet and
-                       seg.network_type == 'vlan'
-                       ):
-                        return True
+            if port.bindings:
+                lli = self._get_port_lli(port)
+                if lli:
+                    net = Network.get_object(db, id=port.network_id)
+                    if net:
+                        for seg in net.segments:
+                            if (
+                               seg.physical_network == physnet and
+                               seg.network_type == 'vlan'
+                               ):
+                                return True
         return False
 
     @staticmethod
@@ -608,3 +620,22 @@ class AnsibleMechanismDriver(ml2api.MechanismDriver):
 
         vif_type = port[portbindings.VIF_TYPE]
         return vif_type == portbindings.VIF_TYPE_OTHER
+
+    @staticmethod
+    def _get_port_lli(port):
+        """Return the local link info for a port
+
+        :param port: The port to get link info from
+        :returns: The link info or None
+        """
+        if not port:
+            return None
+        # Validate port and local link info
+        lli = 'local_link_information'
+        if isinstance(port, Port):
+            local_link_info = port.bindings[0].profile.get(lli)
+        else:
+            if not AnsibleMechanismDriver._is_port_supported(port):
+                return None
+            local_link_info = port['binding:profile'].get(lli)
+        return local_link_info
