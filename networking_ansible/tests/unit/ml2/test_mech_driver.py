@@ -14,7 +14,6 @@
 #    under the License.
 
 import contextlib
-import mock
 import tempfile
 
 import fixtures
@@ -30,6 +29,7 @@ from neutron.tests.unit.plugins.ml2 import test_plugin
 from neutron_lib.api.definitions import portbindings
 from neutron_lib.api.definitions import provider_net
 from neutron_lib.callbacks import resources
+from unittest import mock
 import webob.exc
 
 from networking_ansible import constants as c

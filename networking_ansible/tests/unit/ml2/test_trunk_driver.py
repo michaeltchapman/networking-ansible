@@ -10,7 +10,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import mock
 
 from neutron.objects import trunk
 from neutron_lib.callbacks import events
@@ -23,6 +22,7 @@ from networking_ansible.ml2 import mech_driver
 from networking_ansible.ml2 import trunk_driver
 from neutron.conf.plugins.ml2.config import ml2_opts
 from neutron.tests import base
+from unittest import mock
 
 TEST_PORT_ID = 'abcd-1234-hexu'
 

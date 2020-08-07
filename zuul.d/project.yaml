@@ -14,10 +14,10 @@
 - project:
     templates:
       - networking-ansible-tempest-jobs
-      - openstack-cover-jobs
-      - openstack-python3-ussuri-jobs
-      - periodic-jobs-with-neutron-lib-master
+      #- openstack-cover-jobs
+      #- openstack-python3-ussuri-jobs
+      #- periodic-jobs-with-neutron-lib-master
       - docs-on-readthedocs
-      - openstack-lower-constraints-jobs
+      #- openstack-lower-constraints-jobs
     vars:
       rtd_webhook_id: '45496'
